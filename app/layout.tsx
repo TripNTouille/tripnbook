@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import RoomMenuBar from "@/components/RoomMenuBar";
+import Image from "next/image";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,6 +29,27 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
+        {/* Hero image – full width, 30vh tall */}
+        <div className="relative w-full h-[30vh]">
+          <Image
+            src="/hero.jpg"
+            width="1280"
+            height="420"
+            alt=""
+            className="w-full h-full object-cover"
+          />
+
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="bg-black px-12 py-6">
+              <h1 className="text-white text-3xl md:text-5xl font-semibold tracking-wide">
+                Bienvenue
+              </h1>
+            </div>
+          </div>
+        </div>
+
+        <RoomMenuBar />
+
         {children}
       </body>
     </html>
