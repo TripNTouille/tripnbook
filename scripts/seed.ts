@@ -1,4 +1,17 @@
+import { existsSync, readFileSync } from "fs";
+import { resolve } from "path";
 import { neon } from "@neondatabase/serverless";
+
+// Load .env.local when it exists (local dev). On Vercel, env vars are injected directly.
+const envPath = resolve(process.cwd(), ".env.local");
+if (existsSync(envPath)) {
+  for (const line of readFileSync(envPath, "utf-8").split("\n")) {
+    const match = line.match(/^\s*([\w.-]+)\s*=\s*(.*)?\s*$/);
+    if (match && !process.env[match[1]]) {
+      process.env[match[1]] = (match[2] ?? "").replace(/^["']|["']$/g, "");
+    }
+  }
+}
 
 async function seed() {
   const DATABASE_URL = process.env.DATABASE_URL;
