@@ -1,4 +1,5 @@
 import { getRoom } from '@/lib/rooms'
+import { notFound } from 'next/navigation'
 
 export default async function BookRoomPage({
   params,
@@ -6,7 +7,11 @@ export default async function BookRoomPage({
   params: Promise<{ roomId: string }>
 }) {
   const { roomId } = await params
-  const room = getRoom(roomId)
+  const room = await getRoom(Number(roomId))
+
+  if (!room) {
+    notFound()
+  }
 
   return (
     <div>
