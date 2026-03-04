@@ -1,5 +1,6 @@
 import { getRoom } from '@/lib/rooms'
 import { notFound } from 'next/navigation'
+import DateRangePicker from '@/components/DateRangePicker'
 
 export default async function BookRoomPage({
   params,
@@ -16,6 +17,7 @@ export default async function BookRoomPage({
   return (
     <div>
       <h1>{room.name}</h1>
+      <DateRangePicker />
     </div>
   )
 }
