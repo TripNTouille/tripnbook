@@ -25,7 +25,6 @@ export default function DateRangePicker() {
     : 0
 
   return (
-    <div className="flex justify-center w-full">
     <div className="flex flex-col items-end gap-4">
       <Calendar
         mode="range"
@@ -55,7 +54,6 @@ export default function DateRangePicker() {
           </Button>
         </div>
       )}
-    </div>
     </div>
   )
 }
