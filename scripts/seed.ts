@@ -26,7 +26,30 @@ async function seed() {
     ON CONFLICT (name) DO NOTHING
   `;
 
-  console.log("✅ Seeded rooms table with 4 rows");
+  await sql`
+    CREATE TABLE IF NOT EXISTS room_capacities (
+      id SERIAL PRIMARY KEY,
+      room_id INTEGER NOT NULL REFERENCES rooms(id),
+      capacity INTEGER NOT NULL,
+      adults_min INTEGER NOT NULL,
+      adults_max INTEGER NOT NULL,
+      children_min INTEGER NOT NULL,
+      children_max INTEGER NOT NULL,
+      UNIQUE (room_id)
+    )
+  `;
+
+  await sql`
+    INSERT INTO room_capacities (room_id, capacity, adults_min, adults_max, children_min, children_max)
+    VALUES
+      ((SELECT id FROM rooms WHERE name = 'Tante Aimée'), 2, 1, 2, 0, 1),
+      ((SELECT id FROM rooms WHERE name = 'Jules Verne'), 4, 1, 2, 0, 3),
+      ((SELECT id FROM rooms WHERE name = 'Henriette'), 3, 1, 3, 0, 2),
+      ((SELECT id FROM rooms WHERE name = 'Yukiko'), 2, 1, 2, 0, 1)
+    ON CONFLICT (room_id) DO NOTHING
+  `;
+
+  console.log("✅ Seeded rooms and room_capacities tables");
 }
 
 seed().catch((err) => {
