@@ -25,18 +25,29 @@ async function seed() {
     CREATE TABLE IF NOT EXISTS rooms (
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
+      slug TEXT NOT NULL UNIQUE,
       calendar_url TEXT
     )
   `;
 
+  // Add slug column if it doesn't exist yet (for existing databases)
   await sql`
-    INSERT INTO rooms (name)
+    ALTER TABLE rooms ADD COLUMN IF NOT EXISTS slug TEXT UNIQUE
+  `;
+
+  // Drop image_url column if it exists (replaced by slug-based convention)
+  await sql`
+    ALTER TABLE rooms DROP COLUMN IF EXISTS image_url
+  `;
+
+  await sql`
+    INSERT INTO rooms (name, slug)
     VALUES
-      ('Tante Aimée'),
-      ('Jules Verne'),
-      ('Henriette'),
-      ('Yukiko')
-    ON CONFLICT (name) DO NOTHING
+      ('Tante Aimée', 'tante-aimee'),
+      ('Jules Verne', 'jules-verne'),
+      ('Henriette', 'henriette'),
+      ('Yukiko', 'yukiko')
+    ON CONFLICT (name) DO UPDATE SET slug = EXCLUDED.slug
   `;
 
   await sql`

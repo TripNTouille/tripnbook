@@ -3,6 +3,7 @@ import { neon } from "@neondatabase/serverless";
 export type Room = {
   id: number;
   name: string;
+  slug: string;
   calendar_url: string | null;
 };
 
@@ -24,14 +25,26 @@ function getDb() {
 
 export async function getRooms(): Promise<Room[]> {
   const sql = getDb();
-  const rows = await sql`SELECT id, name, calendar_url FROM rooms ORDER BY id`;
-  return rows as Room[];
+  const rows = await sql`SELECT id, name, slug, calendar_url FROM rooms ORDER BY id`;
+  return rows.map((r) => ({
+    id: r.id as number,
+    name: r.name as string,
+    slug: r.slug as string,
+    calendar_url: r.calendar_url as string | null,
+  }));
 }
 
 export async function getRoom(roomId: number): Promise<Room | null> {
   const sql = getDb();
-  const rows = await sql`SELECT id, name, calendar_url FROM rooms WHERE id = ${roomId} LIMIT 1`;
-  return (rows[0] as Room) ?? null;
+  const rows = await sql`SELECT id, name, slug, calendar_url FROM rooms WHERE id = ${roomId} LIMIT 1`;
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    id: r.id as number,
+    name: r.name as string,
+    slug: r.slug as string,
+    calendar_url: r.calendar_url as string | null,
+  };
 }
 
 export async function getRoomCapacity(roomId: number): Promise<RoomCapacity | null> {
@@ -42,5 +55,13 @@ export async function getRoomCapacity(roomId: number): Promise<RoomCapacity | nu
     WHERE room_id = ${roomId}
     LIMIT 1
   `;
-  return (rows[0] as RoomCapacity) ?? null;
+  const r = rows[0];
+  if (!r) return null;
+  return {
+    capacity: r.capacity as number,
+    adults_min: r.adults_min as number,
+    adults_max: r.adults_max as number,
+    children_min: r.children_min as number,
+    children_max: r.children_max as number,
+  };
 }
