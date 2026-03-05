@@ -53,6 +53,7 @@ export default function DateRangePicker() {
       <Calendar
         mode="range"
         numberOfMonths={isDesktop ? 3 : 1}
+        showOutsideDays={false}
         selected={dateRange}
         onSelect={setDateRange}
         defaultMonth={today}
