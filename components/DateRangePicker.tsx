@@ -35,7 +35,11 @@ function useClientReady() {
   return ready
 }
 
-export default function DateRangePicker() {
+type DateRangePickerProps = {
+  onBook?: (from: Date, to: Date) => void
+}
+
+export default function DateRangePicker({ onBook }: DateRangePickerProps) {
   const client = useClientReady()
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>()
 
@@ -78,7 +82,12 @@ export default function DateRangePicker() {
               <XIcon />
             </Button>
           </div>
-          <Button size="sm">Réserver</Button>
+          <Button
+            size="sm"
+            onClick={() => onBook?.(dateRange.from!, dateRange.to!)}
+          >
+            Réserver
+          </Button>
         </div>
       )}
     </div>

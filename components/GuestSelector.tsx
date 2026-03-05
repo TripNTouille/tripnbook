@@ -16,32 +16,27 @@ function range(min: number, max: number): number[] {
   return result
 }
 
-export default function GuestSelector({ capacity }: { capacity: RoomCapacity }) {
-  const [adults, setAdults] = React.useState(2)
-  const [children, setChildren] = React.useState(0)
+type GuestSelectorProps = {
+  capacity: RoomCapacity
+  adultsCount: number
+  childrenCount: number
+  onAdultsChange: (value: number) => void
+  onChildrenChange: (value: number) => void
+}
 
-  const maxAdults = capacity.capacity - children
-  const maxChildren = capacity.capacity - adults
-
-  function handleAdultsChange(value: string) {
-    const newAdults = Number(value)
-    setAdults(newAdults)
-
-    const allowedChildren = Math.min(capacity.children_max, capacity.capacity - newAdults)
-    if (children > allowedChildren) setChildren(allowedChildren)
-  }
-
-  function handleChildrenChange(value: string) {
-    const newChildren = Number(value)
-    setChildren(newChildren)
-
-    const allowedAdults = Math.min(capacity.adults_max, capacity.capacity - newChildren)
-    if (adults > allowedAdults) setAdults(allowedAdults)
-  }
+export default function GuestSelector({
+  capacity,
+  adultsCount,
+  childrenCount,
+  onAdultsChange,
+  onChildrenChange,
+}: GuestSelectorProps) {
+  const maxAdults = capacity.capacity - childrenCount
+  const maxChildren = capacity.capacity - adultsCount
 
   return (
     <div className="flex items-center gap-4">
-      <Select value={String(adults)} onValueChange={handleAdultsChange}>
+      <Select value={String(adultsCount)} onValueChange={(v) => onAdultsChange(Number(v))}>
         <SelectTrigger>
           <SelectValue />
         </SelectTrigger>
@@ -54,7 +49,7 @@ export default function GuestSelector({ capacity }: { capacity: RoomCapacity }) 
         </SelectContent>
       </Select>
 
-      <Select value={String(children)} onValueChange={handleChildrenChange}>
+      <Select value={String(childrenCount)} onValueChange={(v) => onChildrenChange(Number(v))}>
         <SelectTrigger>
           <SelectValue />
         </SelectTrigger>

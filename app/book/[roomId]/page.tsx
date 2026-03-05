@@ -1,7 +1,6 @@
 import { getRoom, getRoomCapacity } from '@/lib/rooms'
 import { notFound } from 'next/navigation'
-import DateRangePicker from '@/components/DateRangePicker'
-import GuestSelector from '@/components/GuestSelector'
+import BookingForm from '@/components/BookingForm'
 
 export default async function BookRoomPage({
   params,
@@ -21,12 +20,8 @@ export default async function BookRoomPage({
     <div className="flex justify-center w-full mt-4">
       <div className="flex flex-col gap-4">
         {capacity && (
-          <div className="flex flex-col md:flex-row md:items-center gap-2 md:gap-3">
-            <span className="text-sm font-medium">Nombre d&apos;hôtes :</span>
-            <GuestSelector capacity={capacity} />
-          </div>
+          <BookingForm roomName={room.name} capacity={capacity} />
         )}
-        <DateRangePicker />
       </div>
     </div>
   )
