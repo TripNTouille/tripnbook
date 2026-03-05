@@ -54,6 +54,7 @@ export default function DateRangePicker({ onBook }: DateRangePickerProps) {
     <div className="flex flex-col items-center md:items-end gap-4">
       <Calendar
         mode="range"
+        min={1}
         numberOfMonths={isDesktop ? 3 : 1}
         showOutsideDays={false}
         selected={dateRange}
