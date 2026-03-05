@@ -84,7 +84,7 @@ export default function DateRangePicker({ onBook }: DateRangePickerProps) {
             size="sm"
             onClick={() => onBook?.(dateRange.from!, dateRange.to!)}
           >
-            Réserver
+            Voir le tarif
           </Button>
         </div>
       )}

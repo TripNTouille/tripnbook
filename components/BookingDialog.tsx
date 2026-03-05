@@ -138,7 +138,7 @@ export default function BookingDialog({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Annuler
           </Button>
-          <Button disabled={!email.trim() || !phone.trim()}>Confirmer</Button>
+          <Button disabled={!email.trim() || !phone.trim()}>Réserver</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
