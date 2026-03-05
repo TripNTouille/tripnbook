@@ -1,5 +1,3 @@
-"use client"
-
 import * as React from "react"
 import { startOfMonth, startOfDay, differenceInDays, format } from "date-fns"
 import { fr } from "date-fns/locale"
