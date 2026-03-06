@@ -1,7 +1,7 @@
 import * as React from "react"
 import { format, differenceInDays } from "date-fns"
 import { fr } from "date-fns/locale"
-import { Info } from "lucide-react"
+import { Info, Loader2 } from "lucide-react"
 
 import {
   Dialog,
@@ -43,6 +43,8 @@ export default function BookingDialog({
   const [email, setEmail] = React.useState("")
   const [phone, setPhone] = React.useState("")
   const [specialNeeds, setSpecialNeeds] = React.useState("")
+  const [submitting, setSubmitting] = React.useState(false)
+  const [error, setError] = React.useState<string | null>(null)
 
   const nightCount = differenceInDays(to, from)
   const totalGuests = adultsCount + childrenCount
@@ -50,6 +52,38 @@ export default function BookingDialog({
   const pricePerNight = nightCount === 1 ? 80 : 75
   const extraGuests = Math.max(0, totalGuests - 2)
   const totalPrice = (pricePerNight + extraGuests * 20) * nightCount
+
+  async function handleConfirm() {
+    setSubmitting(true)
+    setError(null)
+
+    try {
+      const res = await fetch("/api/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          roomName,
+          adultsCount,
+          childrenCount,
+          from: format(from, "d MMM yyyy", { locale: fr }),
+          to: format(to, "d MMM yyyy", { locale: fr }),
+          nightCount,
+          totalPrice,
+          email: email.trim(),
+          phone: phone.trim(),
+          specialNeeds: specialNeeds.trim(),
+          returnUrl: window.location.pathname,
+        }),
+      })
+
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Erreur lors de la création du paiement")
+      window.location.href = data.url
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Une erreur est survenue")
+      setSubmitting(false)
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -134,11 +168,21 @@ export default function BookingDialog({
           </div>
         </div>
 
+        {error && (
+          <p className="text-sm text-destructive">{error}</p>
+        )}
+
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
             Annuler
           </Button>
-          <Button disabled={!email.trim() || !phone.trim()}>Réserver</Button>
+          <Button
+            disabled={!email.trim() || !phone.trim() || submitting}
+            onClick={handleConfirm}
+          >
+            {submitting && <Loader2 className="size-4 animate-spin" />}
+            Réserver
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

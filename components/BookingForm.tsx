@@ -5,6 +5,7 @@ import type { RoomCapacity } from "@/lib/rooms"
 import GuestSelector from "@/components/GuestSelector"
 import DateRangePicker from "@/components/DateRangePicker"
 import BookingDialog from "@/components/BookingDialog"
+import CheckoutResultDialog from "@/components/CheckoutResultDialog"
 
 type BookingFormProps = {
   roomName: string
@@ -44,6 +45,8 @@ export default function BookingForm({ roomName, capacity }: BookingFormProps) {
       <DateRangePicker
         onBook={(from, to) => setDialogDates({ from, to })}
       />
+
+      <CheckoutResultDialog />
 
       {dialogDates && (
         <BookingDialog
