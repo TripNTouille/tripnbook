@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import Stripe from "stripe"
+import { getDb } from "@/lib/db"
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
   apiVersion: "2026-02-25.clover",
@@ -68,8 +69,18 @@ export async function POST(request: NextRequest) {
       specialNeeds,
     },
     success_url: `${origin}${returnUrl}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${origin}${returnUrl}?checkout=cancelled`,
+    cancel_url: `${origin}${returnUrl}?checkout=cancelled&session_id={CHECKOUT_SESSION_ID}`,
   })
+
+  const sql = getDb()
+  await sql`
+    INSERT INTO booking_logs
+      (room_name, adults_count, children_count, check_in, check_out,
+       night_count, total_price, email, phone, special_needs, stripe_session_id)
+    VALUES
+      (${roomName}, ${adultsCount}, ${childrenCount}, ${from}, ${to},
+       ${nightCount}, ${totalPrice}, ${email}, ${phone}, ${specialNeeds || null}, ${session.id})
+  `
 
   return NextResponse.json({ url: session.url })
 }

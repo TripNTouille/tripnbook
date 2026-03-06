@@ -42,15 +42,17 @@ export default function CheckoutResultDialog() {
     const cleanUrl = window.location.pathname
     window.history.replaceState({}, "", cleanUrl)
 
+    const sessionId = params.get("session_id")
+    if (!sessionId) return
+
     if (checkout === "cancelled") {
+      // Fire-and-forget: update the booking log status to 'cancelled'
+      fetch(`/api/checkout/session?session_id=${sessionId}`)
       setResult({ status: "cancelled" })
       return
     }
 
     if (checkout === "success") {
-      const sessionId = params.get("session_id")
-      if (!sessionId) return
-
       fetch(`/api/checkout/session?session_id=${sessionId}`)
         .then((res) => res.json())
         .then((data) => {
