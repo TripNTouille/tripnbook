@@ -1,4 +1,4 @@
-import { neon } from "@neondatabase/serverless";
+import { getDb } from "@/lib/db";
 
 export type Room = {
   id: number;
@@ -14,14 +14,6 @@ export type RoomCapacity = {
   children_min: number;
   children_max: number;
 };
-
-function getDb() {
-  const DATABASE_URL = process.env.DATABASE_URL;
-  if (!DATABASE_URL) {
-    throw new Error("Missing DATABASE_URL environment variable");
-  }
-  return neon(DATABASE_URL);
-}
 
 export async function getRooms(): Promise<Room[]> {
   const sql = getDb();
