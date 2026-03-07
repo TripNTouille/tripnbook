@@ -1,5 +1,10 @@
 import type Stripe from "stripe"
 
+type JsonResponse = {
+  status: number
+  body: Record<string, unknown>
+}
+
 /**
  * A SQL tagged-template executor compatible with both Neon and PGlite adapters.
  * Accepts a template and returns an array of row objects.
@@ -119,5 +124,22 @@ export async function retrieveCheckoutSession(
     customerEmail: session.customer_email,
     amountTotal: session.amount_total,
     metadata: (session.metadata ?? {}) as Record<string, string>,
+  }
+}
+
+export async function handleGetSession(
+  stripe: Stripe,
+  sql: SqlExecutor,
+  sessionId: string | null,
+): Promise<JsonResponse> {
+  if (!sessionId) {
+    return { status: 400, body: { error: "Missing session_id" } }
+  }
+
+  try {
+    const result = await retrieveCheckoutSession(stripe, sql, sessionId)
+    return { status: 200, body: result as unknown as Record<string, unknown> }
+  } catch {
+    return { status: 404, body: { error: "Session not found" } }
   }
 }

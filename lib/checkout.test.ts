@@ -4,6 +4,7 @@ import type Stripe from "stripe"
 import {
   createCheckoutSession,
   retrieveCheckoutSession,
+  handleGetSession,
   type SqlExecutor,
 } from "./checkout"
 
@@ -334,5 +335,102 @@ describe("retrieveCheckoutSession", () => {
     const result = await retrieveCheckoutSession(stripe, sql, "cs_nonexistent")
 
     expect(result.paymentStatus).toBe("paid")
+  })
+})
+
+// -- Tests: handleGetSession (HTTP-level) ------------------------------------
+
+describe("handleGetSession", () => {
+  async function insertPendingLog(sessionId: string = FAKE_SESSION_ID) {
+    await db.query(
+      `INSERT INTO booking_logs
+        (room_name, adults_count, children_count, check_in, check_out,
+         night_count, total_price, email, phone, stripe_session_id, status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending')`,
+      ["Jules Verne", 2, 0, "1 janv. 2026", "4 janv. 2026", 3, 225, "test@example.com", "+33 6 00 00 00 00", sessionId]
+    )
+  }
+
+  it("returns 400 when session_id is null", async () => {
+    const stripe = makeMockStripe()
+    const response = await handleGetSession(stripe, sql, null)
+
+    expect(response.status).toBe(400)
+    expect(response.body).toEqual({ error: "Missing session_id" })
+  })
+
+  it("returns 404 when Stripe cannot find the session", async () => {
+    const stripe = {
+      checkout: {
+        sessions: {
+          retrieve: async () => { throw new Error("No such checkout session") },
+        },
+      },
+    } as unknown as Stripe
+
+    const response = await handleGetSession(stripe, sql, "cs_invalid_id")
+
+    expect(response.status).toBe(404)
+    expect(response.body).toEqual({ error: "Session not found" })
+  })
+
+  it("returns 200 with session data on successful payment", async () => {
+    await insertPendingLog()
+    const stripe = makeMockStripe({ paymentStatus: "paid" })
+
+    const response = await handleGetSession(stripe, sql, FAKE_SESSION_ID)
+
+    expect(response.status).toBe(200)
+    expect(response.body.paymentStatus).toBe("paid")
+    expect(response.body.customerEmail).toBe("test@example.com")
+    expect(response.body.amountTotal).toBe(22500)
+
+    const metadata = response.body.metadata as Record<string, string>
+    expect(metadata.roomName).toBe("Jules Verne")
+    expect(metadata.nightCount).toBe("3")
+  })
+
+  it("returns 200 and updates log to 'paid'", async () => {
+    await insertPendingLog()
+    const stripe = makeMockStripe({ paymentStatus: "paid" })
+
+    await handleGetSession(stripe, sql, FAKE_SESSION_ID)
+
+    const rows = (await db.query("SELECT status FROM booking_logs WHERE stripe_session_id = $1", [FAKE_SESSION_ID])).rows as Record<string, unknown>[]
+    expect(rows[0].status).toBe("paid")
+  })
+
+  it("returns 200 and updates log to 'cancelled' on unpaid session", async () => {
+    await insertPendingLog()
+    const stripe = makeMockStripe({ paymentStatus: "unpaid" })
+
+    const response = await handleGetSession(stripe, sql, FAKE_SESSION_ID)
+
+    expect(response.status).toBe(200)
+    expect(response.body.paymentStatus).toBe("unpaid")
+
+    const rows = (await db.query("SELECT status FROM booking_logs WHERE stripe_session_id = $1", [FAKE_SESSION_ID])).rows as Record<string, unknown>[]
+    expect(rows[0].status).toBe("cancelled")
+  })
+
+  it("does not update an already-paid log on subsequent call", async () => {
+    await insertPendingLog()
+    const stripePaid = makeMockStripe({ paymentStatus: "paid" })
+    await handleGetSession(stripePaid, sql, FAKE_SESSION_ID)
+
+    const stripeUnpaid = makeMockStripe({ paymentStatus: "unpaid" })
+    await handleGetSession(stripeUnpaid, sql, FAKE_SESSION_ID)
+
+    const rows = (await db.query("SELECT status FROM booking_logs WHERE stripe_session_id = $1", [FAKE_SESSION_ID])).rows as Record<string, unknown>[]
+    expect(rows[0].status).toBe("paid")
+  })
+
+  it("returns 200 even when no booking log exists for the session", async () => {
+    const stripe = makeMockStripe({ paymentStatus: "paid" })
+
+    const response = await handleGetSession(stripe, sql, FAKE_SESSION_ID)
+
+    expect(response.status).toBe(200)
+    expect(response.body.paymentStatus).toBe("paid")
   })
 })
