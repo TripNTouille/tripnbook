@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "npm run seed && next dev",
-    "build": "npm run seed && next build",
+    "build": "next build",
     "start": "npm run seed && next start",
     "lint": "eslint",
     "seed": "tsx scripts/seed.ts",
