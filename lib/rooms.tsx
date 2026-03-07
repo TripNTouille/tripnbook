@@ -4,7 +4,6 @@ export type Room = {
   id: number;
   name: string;
   slug: string;
-  calendar_url: string | null;
 };
 
 export type RoomCapacity = {
@@ -17,25 +16,23 @@ export type RoomCapacity = {
 
 export async function getRooms(): Promise<Room[]> {
   const sql = getDb();
-  const rows = await sql`SELECT id, name, slug, calendar_url FROM rooms ORDER BY id`;
+  const rows = await sql`SELECT id, name, slug FROM rooms ORDER BY id`;
   return rows.map((r) => ({
     id: r.id as number,
     name: r.name as string,
     slug: r.slug as string,
-    calendar_url: r.calendar_url as string | null,
   }));
 }
 
 export async function getRoom(roomId: number): Promise<Room | null> {
   const sql = getDb();
-  const rows = await sql`SELECT id, name, slug, calendar_url FROM rooms WHERE id = ${roomId} LIMIT 1`;
+  const rows = await sql`SELECT id, name, slug FROM rooms WHERE id = ${roomId} LIMIT 1`;
   const r = rows[0];
   if (!r) return null;
   return {
     id: r.id as number,
     name: r.name as string,
     slug: r.slug as string,
-    calendar_url: r.calendar_url as string | null,
   };
 }
 

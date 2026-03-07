@@ -1,36 +1,83 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Trip'n Touille — Booking App
+
+A room booking app for the Trip'n Touille guest house in Vendenesse-les-Charolles, France.
+
+## Tech Stack
+
+- **Framework**: Next.js 16 (App Router, React 19)
+- **Database**: Neon (serverless Postgres) via `@neondatabase/serverless`
+- **Payments**: Stripe Checkout
+- **Styling**: Tailwind CSS 4 + shadcn/ui
+- **Language**: TypeScript
+- **Testing**: Vitest + PGlite (in-memory Postgres)
+- **Deployment**: Vercel
+- **CI**: GitHub Actions
 
 ## Getting Started
 
-First, run the development server:
+### Prerequisites
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+- Node.js 22+
+- A [Neon](https://neon.tech) database
+- A [Stripe](https://dashboard.stripe.com/apikeys) account (test keys are fine for development)
+
+### Environment Variables
+
+Create a `.env.local` file at the project root:
+
+```
+DATABASE_URL=postgres://...your-neon-connection-string...
+STRIPE_SECRET_KEY=sk_test_...
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### Install & Run
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```sh
+npm install
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The dev server seeds the database automatically on startup, then starts at [http://localhost:3000](http://localhost:3000).
 
-## Learn More
+## Scripts
 
-To learn more about Next.js, take a look at the following resources:
+| Script | Description |
+|---|---|
+| `npm run dev` | Seed DB + start dev server |
+| `npm run build` | Production build |
+| `npm start` | Seed DB + start production server |
+| `npm run seed` | Seed the database (idempotent) |
+| `npm test` | Run tests (Vitest) |
+| `npm run lint` | Run ESLint |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Project Structure
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- `app`: NextJS App Router pages and layouts
+- `components`: Reusable React components for the booking flow
+- `components/ui`: shadcn/ui components
+- `lib`: Shared utilities, database helpers, and business logic
+- `scripts`: Database seeding and migration scripts
+- `public`: Static assets
 
-## Deploy on Vercel
+## Booking Flow
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+1. Select guests (constrained by room capacity)
+2. Pick a date range on the calendar (minimum 1 night)
+3. Review price and enter contact info in the confirmation dialog
+4. Pay via Stripe Checkout
+5. Redirected back to the room page with a success/cancellation dialog
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Testing
+
+```sh
+npm test
+```
+
+Tests use:
+- **Vitest** as test runner
+- **PGlite** as in-memory Postgres Db for integration tests
+- a **mocked Stripe** for the checkout flow
+
+## CI
+
+GitHub Actions runs on every push/PR to `main`

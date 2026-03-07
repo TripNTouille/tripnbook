@@ -25,8 +25,7 @@ async function seed() {
     CREATE TABLE IF NOT EXISTS rooms (
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
-      slug TEXT NOT NULL UNIQUE,
-      calendar_url TEXT
+      slug TEXT NOT NULL UNIQUE
     )
   `;
 
@@ -35,9 +34,12 @@ async function seed() {
     ALTER TABLE rooms ADD COLUMN IF NOT EXISTS slug TEXT UNIQUE
   `;
 
-  // Drop image_url column if it exists (replaced by slug-based convention)
+  // Drop legacy columns if they exist
   await sql`
     ALTER TABLE rooms DROP COLUMN IF EXISTS image_url
+  `;
+  await sql`
+    ALTER TABLE rooms DROP COLUMN IF EXISTS calendar_url
   `;
 
   await sql`
