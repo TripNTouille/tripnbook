@@ -73,7 +73,26 @@ async function seed() {
     ON CONFLICT (room_id) DO NOTHING
   `;
 
-  console.log("✅ Seeded rooms and room_capacities tables");
+  await sql`
+    CREATE TABLE IF NOT EXISTS booking_logs (
+      id SERIAL PRIMARY KEY,
+      room_name TEXT NOT NULL,
+      adults_count INTEGER NOT NULL,
+      children_count INTEGER NOT NULL,
+      check_in TEXT NOT NULL,
+      check_out TEXT NOT NULL,
+      night_count INTEGER NOT NULL,
+      total_price INTEGER NOT NULL,
+      email TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      special_needs TEXT,
+      stripe_session_id TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `;
+
+  console.log("✅ Seeded rooms, room_capacities, and booking_logs tables");
 }
 
 seed().catch((err) => {
