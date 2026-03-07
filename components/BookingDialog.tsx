@@ -2,6 +2,7 @@ import * as React from "react"
 import { format, differenceInDays } from "date-fns"
 import { fr } from "date-fns/locale"
 import { Info, Loader2 } from "lucide-react"
+import { calculatePrice } from "@/lib/pricing"
 
 import {
   Dialog,
@@ -48,10 +49,7 @@ export default function BookingDialog({
 
   const nightCount = differenceInDays(to, from)
   const totalGuests = adultsCount + childrenCount
-
-  const pricePerNight = nightCount === 1 ? 80 : 75
-  const extraGuests = Math.max(0, totalGuests - 2)
-  const totalPrice = (pricePerNight + extraGuests * 20) * nightCount
+  const { pricePerNight, pricePerExtraGuest, extraGuests, totalPrice } = calculatePrice({ nightCount, adultsCount, childrenCount })
 
   async function handleConfirm() {
     setSubmitting(true)
@@ -118,8 +116,8 @@ export default function BookingDialog({
                   </TooltipTrigger>
                   <TooltipContent>
                     <ul className="list-disc pl-3">
-                      <li>{pricePerNight} €/nuit (1-2 pers.)</li>
-                      {extraGuests > 0 && <li>{extraGuests} pers. suppl. × 20 €/nuit</li>}
+                      <li>{pricePerNight} €/nuit</li>
+                      {extraGuests > 0 && <li>{extraGuests} pers. suppl. × {pricePerExtraGuest} €/nuit</li>}
                       <li>{nightCount} {nightCount > 1 ? "nuits" : "nuit"}</li>
                     </ul>
                   </TooltipContent>

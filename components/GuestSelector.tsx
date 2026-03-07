@@ -1,5 +1,6 @@
 import * as React from "react"
 import type { RoomCapacity } from "@/lib/rooms"
+import { allowedAdultsRange, allowedChildrenRange } from "@/lib/capacity"
 import {
   Select,
   SelectContent,
@@ -29,8 +30,8 @@ export default function GuestSelector({
   onAdultsChange,
   onChildrenChange,
 }: GuestSelectorProps) {
-  const maxAdults = capacity.capacity - childrenCount
-  const maxChildren = capacity.capacity - adultsCount
+  const adults = allowedAdultsRange(capacity, childrenCount)
+  const children = allowedChildrenRange(capacity, adultsCount)
 
   return (
     <div className="flex items-center gap-4">
@@ -39,7 +40,7 @@ export default function GuestSelector({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {range(capacity.adults_min, Math.min(capacity.adults_max, maxAdults)).map((n) => (
+          {range(adults.min, adults.max).map((n) => (
             <SelectItem key={n} value={String(n)}>
               {n} {n > 1 ? "adultes" : "adulte"}
             </SelectItem>
@@ -52,7 +53,7 @@ export default function GuestSelector({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {range(capacity.children_min, Math.min(capacity.children_max, maxChildren)).map((n) => (
+          {range(children.min, children.max).map((n) => (
             <SelectItem key={n} value={String(n)}>
               {n} {n > 1 ? "enfants" : "enfant"}
             </SelectItem>

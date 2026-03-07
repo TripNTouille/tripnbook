@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import type { RoomCapacity } from "@/lib/rooms"
+import { clampChildrenAfterAdultsChange, clampAdultsAfterChildrenChange } from "@/lib/capacity"
 import GuestSelector from "@/components/GuestSelector"
 import DateRangePicker from "@/components/DateRangePicker"
 import BookingDialog from "@/components/BookingDialog"
@@ -19,14 +20,12 @@ export default function BookingForm({ roomName, capacity }: BookingFormProps) {
 
   function handleAdultsChange(value: number) {
     setAdultsCount(value)
-    const allowedChildren = Math.min(capacity.children_max, capacity.capacity - value)
-    if (childrenCount > allowedChildren) setChildrenCount(allowedChildren)
+    setChildrenCount(clampChildrenAfterAdultsChange(capacity, value, childrenCount))
   }
 
   function handleChildrenChange(value: number) {
     setChildrenCount(value)
-    const allowedAdults = Math.min(capacity.adults_max, capacity.capacity - value)
-    if (adultsCount > allowedAdults) setAdultsCount(allowedAdults)
+    setAdultsCount(clampAdultsAfterChildrenChange(capacity, value, adultsCount))
   }
 
   return (
