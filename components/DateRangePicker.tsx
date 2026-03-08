@@ -1,5 +1,5 @@
 import * as React from "react"
-import { startOfMonth, startOfDay, differenceInDays, format } from "date-fns"
+import { startOfMonth, startOfDay, differenceInDays, addMonths, format } from "date-fns"
 import { fr } from "date-fns/locale"
 import { XIcon } from "lucide-react"
 import type { DateRange } from "react-day-picker"
@@ -33,13 +33,80 @@ function useClientReady() {
   return ready
 }
 
+async function fetchBusyDates(roomId: number, from: Date, to: Date): Promise<string[]> {
+  const params = new URLSearchParams({
+    roomId: String(roomId),
+    from: from.toISOString(),
+    to: to.toISOString(),
+  })
+  const response = await fetch(`/api/busy-dates?${params}`)
+  if (!response.ok) return []
+  const data = await response.json()
+  return data.dates ?? []
+}
+
 type DateRangePickerProps = {
+  roomId: number
+  busyDates?: string[]
   onBook?: (from: Date, to: Date) => void
 }
 
-export default function DateRangePicker({ onBook }: DateRangePickerProps) {
+export default function DateRangePicker({ roomId, busyDates = [], onBook }: DateRangePickerProps) {
   const client = useClientReady()
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>()
+
+  // All known busy dates as ISO strings (initial + dynamically fetched)
+  const [allBusyDates, setAllBusyDates] = React.useState<Set<string>>(
+    () => new Set(busyDates),
+  )
+
+  // Track which month ranges we've already fetched so we don't re-fetch
+  const fetchedRangesRef = React.useRef<Set<string>>(new Set())
+
+  // Mark the initial server-fetched range as already covered (visible months + 1 buffer on each side)
+  React.useEffect(() => {
+    const now = new Date()
+    for (let i = 0; i < 5; i++) {
+      const key = monthKey(addMonths(now, i))
+      fetchedRangesRef.current.add(key)
+    }
+  }, [])
+
+  const busyDateObjects = React.useMemo(
+    () => Array.from(allBusyDates).map((iso) => new Date(iso)),
+    [allBusyDates],
+  )
+
+  function handleMonthChange(month: Date) {
+    if (!client) return
+    const visibleMonths = client.isDesktop ? 3 : 1
+
+    // Visible months + 1 buffer before + 1 buffer after
+    const monthsToFetch: Date[] = []
+    for (let i = -1; i <= visibleMonths; i++) {
+      const m = addMonths(month, i)
+      const key = monthKey(m)
+      if (!fetchedRangesRef.current.has(key)) {
+        fetchedRangesRef.current.add(key)
+        monthsToFetch.push(m)
+      }
+    }
+
+    if (monthsToFetch.length === 0) return
+
+    // Fetch the full range covering all unfetched months in one request
+    const from = startOfMonth(monthsToFetch[0])
+    const to = startOfMonth(addMonths(monthsToFetch[monthsToFetch.length - 1], 1))
+
+    fetchBusyDates(roomId, from, to).then((newDates) => {
+      if (newDates.length === 0) return
+      setAllBusyDates((prev) => {
+        const next = new Set(prev)
+        for (const d of newDates) next.add(d)
+        return next
+      })
+    })
+  }
 
   if (!client) return null
 
@@ -59,9 +126,12 @@ export default function DateRangePicker({ onBook }: DateRangePickerProps) {
         showOutsideDays={false}
         selected={dateRange}
         onSelect={setDateRange}
+        onMonthChange={handleMonthChange}
         defaultMonth={today}
         startMonth={startOfMonth(today)}
-        disabled={{ before: today }}
+        modifiers={{ busy: busyDateObjects }}
+        modifiersClassNames={{ busy: "line-through" }}
+        disabled={[{ before: today }, ...busyDateObjects]}
       />
 
       {hasCompleteRange && (
@@ -91,4 +161,11 @@ export default function DateRangePicker({ onBook }: DateRangePickerProps) {
       )}
     </div>
   )
+}
+
+/** Stable string key for a given month, e.g. "2025-07" */
+function monthKey(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, "0")
+  return `${y}-${m}`
 }

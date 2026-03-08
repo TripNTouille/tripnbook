@@ -9,11 +9,13 @@ import BookingDialog from "@/components/BookingDialog"
 import CheckoutResultDialog from "@/components/CheckoutResultDialog"
 
 type BookingFormProps = {
+  roomId: number
   roomName: string
   capacity: RoomCapacity
+  busyDates: string[]
 }
 
-export default function BookingForm({ roomName, capacity }: BookingFormProps) {
+export default function BookingForm({ roomId, roomName, capacity, busyDates }: BookingFormProps) {
   const [adultsCount, setAdultsCount] = React.useState(2)
   const [childrenCount, setChildrenCount] = React.useState(0)
   const [dialogDates, setDialogDates] = React.useState<{ from: Date; to: Date } | null>(null)
@@ -42,6 +44,8 @@ export default function BookingForm({ roomName, capacity }: BookingFormProps) {
       </div>
 
       <DateRangePicker
+        roomId={roomId}
+        busyDates={busyDates}
         onBook={(from, to) => setDialogDates({ from, to })}
       />
 
