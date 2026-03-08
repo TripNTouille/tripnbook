@@ -25,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea"
 type BookingDialogProps = {
   open: boolean
   onOpenChange: (open: boolean) => void
+  roomId: number
   roomName: string
   adultsCount: number
   childrenCount: number
@@ -35,12 +36,14 @@ type BookingDialogProps = {
 export default function BookingDialog({
   open,
   onOpenChange,
+  roomId,
   roomName,
   adultsCount,
   childrenCount,
   from,
   to,
 }: BookingDialogProps) {
+  const [fullName, setFullName] = React.useState("")
   const [email, setEmail] = React.useState("")
   const [phone, setPhone] = React.useState("")
   const [specialNeeds, setSpecialNeeds] = React.useState("")
@@ -60,13 +63,17 @@ export default function BookingDialog({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          roomId,
           roomName,
           adultsCount,
           childrenCount,
           from: format(from, "d MMM yyyy", { locale: fr }),
           to: format(to, "d MMM yyyy", { locale: fr }),
+          fromDate: from.toISOString(),
+          toDate: to.toISOString(),
           nightCount,
           totalPrice,
+          fullName: fullName.trim(),
           email: email.trim(),
           phone: phone.trim(),
           specialNeeds: specialNeeds.trim(),
@@ -130,6 +137,18 @@ export default function BookingDialog({
           {/* Contact fields */}
           <div className="flex flex-col gap-3">
             <div className="flex flex-col gap-1.5">
+              <Label htmlFor="full-name">Nom complet *</Label>
+              <Input
+                id="full-name"
+                type="text"
+                placeholder="Jean Dupont"
+                required
+                value={fullName}
+                onChange={(e) => setFullName(e.target.value)}
+              />
+            </div>
+
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="email">Email *</Label>
               <Input
                 id="email"
@@ -175,7 +194,7 @@ export default function BookingDialog({
             Annuler
           </Button>
           <Button
-            disabled={!email.trim() || !phone.trim() || submitting}
+            disabled={!fullName.trim() || !email.trim() || !phone.trim() || submitting}
             onClick={handleConfirm}
           >
             {submitting && <Loader2 className="size-4 animate-spin" />}

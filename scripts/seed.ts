@@ -25,7 +25,8 @@ async function seed() {
     CREATE TABLE IF NOT EXISTS rooms (
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
-      slug TEXT NOT NULL UNIQUE
+      slug TEXT NOT NULL UNIQUE,
+      google_calendar_id TEXT
     )
   `;
 
@@ -42,14 +43,21 @@ async function seed() {
     ALTER TABLE rooms DROP COLUMN IF EXISTS calendar_url
   `;
 
+  // Add google_calendar_id column if it doesn't exist yet
   await sql`
-    INSERT INTO rooms (name, slug)
+    ALTER TABLE rooms ADD COLUMN IF NOT EXISTS google_calendar_id TEXT
+  `;
+
+  const testCalendarId = '6b0cc1d7509e5eaf0ba2593034c4c369c74c612a83452a74265815fa2d979dbd@group.calendar.google.com';
+
+  await sql`
+    INSERT INTO rooms (name, slug, google_calendar_id)
     VALUES
-      ('Tante Aimée', 'tante-aimee'),
-      ('Jules Verne', 'jules-verne'),
-      ('Henriette', 'henriette'),
-      ('Yukiko', 'yukiko')
-    ON CONFLICT (name) DO UPDATE SET slug = EXCLUDED.slug
+      ('Tante Aimée', 'tante-aimee', ${testCalendarId}),
+      ('Jules Verne', 'jules-verne', ${testCalendarId}),
+      ('Henriette', 'henriette', ${testCalendarId}),
+      ('Yukiko', 'yukiko', ${testCalendarId})
+    ON CONFLICT (name) DO UPDATE SET slug = EXCLUDED.slug, google_calendar_id = EXCLUDED.google_calendar_id
   `;
 
   await sql`
@@ -79,6 +87,7 @@ async function seed() {
     CREATE TABLE IF NOT EXISTS booking_logs (
       id SERIAL PRIMARY KEY,
       room_name TEXT NOT NULL,
+      full_name TEXT,
       adults_count INTEGER NOT NULL,
       children_count INTEGER NOT NULL,
       check_in TEXT NOT NULL,
@@ -92,6 +101,11 @@ async function seed() {
       status TEXT NOT NULL DEFAULT 'pending',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `;
+
+  // Add full_name column if it doesn't exist yet (for existing databases)
+  await sql`
+    ALTER TABLE booking_logs ADD COLUMN IF NOT EXISTS full_name TEXT
   `;
 
   console.log("✅ Seeded rooms, room_capacities, and booking_logs tables");

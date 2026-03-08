@@ -28,6 +28,8 @@ Create a `.env.local` file at the project root:
 ```
 DATABASE_URL=postgres://...your-neon-connection-string...
 STRIPE_SECRET_KEY=sk_test_...
+GOOGLE_CLIENT_EMAIL=booking@my-project.iam.gserviceaccount.com
+GOOGLE_PRIVATE_KEY="-----BEGIN RSA PRIVATE KEY-----\n...\n-----END RSA PRIVATE KEY-----\n"
 ```
 
 ### Install & Run

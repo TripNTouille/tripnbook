@@ -5,7 +5,9 @@ import {
   createCheckoutSession,
   retrieveCheckoutSession,
   handleGetSession,
+  DatesUnavailableError,
   type SqlExecutor,
+  type CalendarDeps,
 } from "./checkout"
 
 // -- In-memory Postgres via PGlite ------------------------------------------
@@ -35,6 +37,7 @@ const FAKE_CHECKOUT_URL = "https://checkout.stripe.com/pay/cs_test_abc123"
 function makeMockStripe(overrides: {
   paymentStatus?: string
   sessionId?: string
+  metadata?: Record<string, string>
 } = {}): Stripe {
   const sessionId = overrides.sessionId ?? FAKE_SESSION_ID
   const paymentStatus = overrides.paymentStatus ?? "paid"
@@ -53,6 +56,7 @@ function makeMockStripe(overrides: {
         retrieve: async () => ({
           id: sessionId,
           url: FAKE_CHECKOUT_URL,
+          payment_intent: "pi_test_abc123",
           payment_status: paymentStatus,
           customer_email: "test@example.com",
           amount_total: 22500,
@@ -65,6 +69,7 @@ function makeMockStripe(overrides: {
             nightCount: "3",
             phone: "+33 6 00 00 00 00",
             specialNeeds: "",
+            ...(overrides.metadata ?? {}),
           },
         }),
       },
@@ -72,16 +77,71 @@ function makeMockStripe(overrides: {
   } as unknown as Stripe
 }
 
+// -- Calendar mock -----------------------------------------------------------
+
+const FAKE_EVENT_ID = "gcal_event_123"
+const FAKE_CALENDAR_ID = "room-calendar@group.calendar.google.com"
+
+function makeMockCalendar(overrides: {
+  calendarId?: string | null
+  datesFree?: boolean
+  holdEventId?: string
+} = {}): CalendarDeps & {
+  calls: {
+    getCalendarId: number
+    areDatesFree: number
+    createHoldEvent: number
+    confirmHoldEvent: number
+    deleteHoldEvent: number
+  }
+  deletedEvents: string[]
+} {
+  const calendarId = overrides.calendarId === undefined ? FAKE_CALENDAR_ID : overrides.calendarId
+  const datesFree = overrides.datesFree ?? true
+  const holdEventId = overrides.holdEventId ?? FAKE_EVENT_ID
+
+  const calls = { getCalendarId: 0, areDatesFree: 0, createHoldEvent: 0, confirmHoldEvent: 0, deleteHoldEvent: 0 }
+  const deletedEvents: string[] = []
+
+  return {
+    calls,
+    deletedEvents,
+    getCalendarId: async () => {
+      calls.getCalendarId++
+      return calendarId
+    },
+    areDatesFree: async () => {
+      calls.areDatesFree++
+      return datesFree
+    },
+    createHoldEvent: async () => {
+      calls.createHoldEvent++
+      return holdEventId
+    },
+    confirmHoldEvent: async () => {
+      calls.confirmHoldEvent++
+    },
+    deleteHoldEvent: async (_calendarId, eventId) => {
+      calls.deleteHoldEvent++
+      deletedEvents.push(eventId)
+    },
+  }
+}
+
 // -- Test fixtures -----------------------------------------------------------
 
 const validInput = {
+  roomId: 2,
   roomName: "Jules Verne",
   adultsCount: 2,
   childrenCount: 0,
   from: "1 janv. 2026",
   to: "4 janv. 2026",
+  fromDate: "2026-01-01T00:00:00.000Z",
+  toDate: "2026-01-04T00:00:00.000Z",
   nightCount: 3,
   totalPrice: 225,
+  fullName: "Jean Dupont",
   email: "test@example.com",
   phone: "+33 6 00 00 00 00",
   specialNeeds: "",
@@ -99,6 +159,7 @@ beforeAll(async () => {
     CREATE TABLE booking_logs (
       id SERIAL PRIMARY KEY,
       room_name TEXT NOT NULL,
+      full_name TEXT,
       adults_count INTEGER NOT NULL,
       children_count INTEGER NOT NULL,
       check_in TEXT NOT NULL,
@@ -128,20 +189,23 @@ afterAll(async () => {
 describe("createCheckoutSession", () => {
   it("returns the Stripe checkout URL", async () => {
     const stripe = makeMockStripe()
-    const result = await createCheckoutSession(stripe, sql, validInput)
+    const calendar = makeMockCalendar()
+    const result = await createCheckoutSession(stripe, sql, calendar, validInput)
 
     expect(result.url).toBe(FAKE_CHECKOUT_URL)
   })
 
   it("inserts a booking log with status 'pending'", async () => {
     const stripe = makeMockStripe()
-    await createCheckoutSession(stripe, sql, validInput)
+    const calendar = makeMockCalendar()
+    await createCheckoutSession(stripe, sql, calendar, validInput)
 
     const rows = (await db.query("SELECT * FROM booking_logs")).rows as Record<string, unknown>[]
     expect(rows).toHaveLength(1)
 
     const log = rows[0]
     expect(log.room_name).toBe("Jules Verne")
+    expect(log.full_name).toBe("Jean Dupont")
     expect(log.adults_count).toBe(2)
     expect(log.children_count).toBe(0)
     expect(log.check_in).toBe("1 janv. 2026")
@@ -156,7 +220,8 @@ describe("createCheckoutSession", () => {
 
   it("stores null for empty special_needs", async () => {
     const stripe = makeMockStripe()
-    await createCheckoutSession(stripe, sql, { ...validInput, specialNeeds: "" })
+    const calendar = makeMockCalendar()
+    await createCheckoutSession(stripe, sql, calendar, { ...validInput, specialNeeds: "" })
 
     const rows = (await db.query("SELECT special_needs FROM booking_logs")).rows as Record<string, unknown>[]
     expect(rows[0].special_needs).toBeNull()
@@ -164,7 +229,8 @@ describe("createCheckoutSession", () => {
 
   it("stores special_needs when provided", async () => {
     const stripe = makeMockStripe()
-    await createCheckoutSession(stripe, sql, { ...validInput, specialNeeds: "Lit bébé SVP" })
+    const calendar = makeMockCalendar()
+    await createCheckoutSession(stripe, sql, calendar, { ...validInput, specialNeeds: "Lit bébé SVP" })
 
     const rows = (await db.query("SELECT special_needs FROM booking_logs")).rows as Record<string, unknown>[]
     expect(rows[0].special_needs).toBe("Lit bébé SVP")
@@ -182,8 +248,9 @@ describe("createCheckoutSession", () => {
         },
       },
     } as unknown as Stripe
+    const calendar = makeMockCalendar()
 
-    await createCheckoutSession(stripe, sql, validInput)
+    await createCheckoutSession(stripe, sql, calendar, validInput)
 
     expect(capturedParams).not.toBeNull()
     expect(capturedParams!.customer_email).toBe("test@example.com")
@@ -207,8 +274,9 @@ describe("createCheckoutSession", () => {
         },
       },
     } as unknown as Stripe
+    const calendar = makeMockCalendar()
 
-    await createCheckoutSession(stripe, sql, { ...validInput, nightCount: 1, totalPrice: 80 })
+    await createCheckoutSession(stripe, sql, calendar, { ...validInput, nightCount: 1, totalPrice: 80 })
 
     const lineItem = capturedParams!.line_items![0] as { price_data: { product_data: { name: string } } }
     expect(lineItem.price_data.product_data.name).toBe("Jules Verne — 1 nuit")
@@ -226,8 +294,9 @@ describe("createCheckoutSession", () => {
         },
       },
     } as unknown as Stripe
+    const calendar = makeMockCalendar()
 
-    await createCheckoutSession(stripe, sql, { ...validInput, adultsCount: 2, childrenCount: 1 })
+    await createCheckoutSession(stripe, sql, calendar, { ...validInput, adultsCount: 2, childrenCount: 1 })
 
     const lineItem = capturedParams!.line_items![0] as { price_data: { product_data: { description: string } } }
     expect(lineItem.price_data.product_data.description).toContain("3 pers. (2 ad., 1 enf.)")
@@ -245,8 +314,9 @@ describe("createCheckoutSession", () => {
         },
       },
     } as unknown as Stripe
+    const calendar = makeMockCalendar()
 
-    await createCheckoutSession(stripe, sql, validInput)
+    await createCheckoutSession(stripe, sql, calendar, validInput)
 
     expect(capturedParams!.success_url).toBe(
       "http://localhost:3000/book/2?checkout=success&session_id={CHECKOUT_SESSION_ID}"
@@ -254,6 +324,151 @@ describe("createCheckoutSession", () => {
     expect(capturedParams!.cancel_url).toBe(
       "http://localhost:3000/book/2?checkout=cancelled&session_id={CHECKOUT_SESSION_ID}"
     )
+  })
+})
+
+// -- Tests: availability check & hold event ----------------------------------
+
+describe("createCheckoutSession — calendar integration", () => {
+  it("checks availability before creating the Stripe session", async () => {
+    const stripe = makeMockStripe()
+    const calendar = makeMockCalendar({ datesFree: true })
+
+    await createCheckoutSession(stripe, sql, calendar, validInput)
+
+    expect(calendar.calls.getCalendarId).toBe(1)
+    expect(calendar.calls.areDatesFree).toBe(1)
+  })
+
+  it("creates a hold event when dates are free", async () => {
+    const stripe = makeMockStripe()
+    const calendar = makeMockCalendar({ datesFree: true })
+
+    await createCheckoutSession(stripe, sql, calendar, validInput)
+
+    expect(calendar.calls.createHoldEvent).toBe(1)
+  })
+
+  it("stores calendarId and holdEventId in Stripe metadata", async () => {
+    let capturedParams: Stripe.Checkout.SessionCreateParams | null = null
+    const stripe = {
+      checkout: {
+        sessions: {
+          create: async (params: Stripe.Checkout.SessionCreateParams) => {
+            capturedParams = params
+            return { id: FAKE_SESSION_ID, url: FAKE_CHECKOUT_URL }
+          },
+        },
+      },
+    } as unknown as Stripe
+    const calendar = makeMockCalendar()
+
+    await createCheckoutSession(stripe, sql, calendar, validInput)
+
+    expect(capturedParams!.metadata!.calendarId).toBe(FAKE_CALENDAR_ID)
+    expect(capturedParams!.metadata!.holdEventId).toBe(FAKE_EVENT_ID)
+  })
+
+  it("throws DatesUnavailableError when dates are taken", async () => {
+    const stripe = makeMockStripe()
+    const calendar = makeMockCalendar({ datesFree: false })
+
+    await expect(
+      createCheckoutSession(stripe, sql, calendar, validInput)
+    ).rejects.toThrow(DatesUnavailableError)
+  })
+
+  it("does not create a hold event when dates are taken", async () => {
+    const stripe = makeMockStripe()
+    const calendar = makeMockCalendar({ datesFree: false })
+
+    try {
+      await createCheckoutSession(stripe, sql, calendar, validInput)
+    } catch { /* expected */ }
+
+    expect(calendar.calls.createHoldEvent).toBe(0)
+  })
+
+  it("does not create a Stripe session when dates are taken", async () => {
+    let stripeCreateCalled = false
+    const stripe = {
+      checkout: {
+        sessions: {
+          create: async () => {
+            stripeCreateCalled = true
+            return { id: FAKE_SESSION_ID, url: FAKE_CHECKOUT_URL }
+          },
+        },
+      },
+    } as unknown as Stripe
+    const calendar = makeMockCalendar({ datesFree: false })
+
+    try {
+      await createCheckoutSession(stripe, sql, calendar, validInput)
+    } catch { /* expected */ }
+
+    expect(stripeCreateCalled).toBe(false)
+  })
+
+  it("does not insert a booking log when dates are taken", async () => {
+    const stripe = makeMockStripe()
+    const calendar = makeMockCalendar({ datesFree: false })
+
+    try {
+      await createCheckoutSession(stripe, sql, calendar, validInput)
+    } catch { /* expected */ }
+
+    const rows = (await db.query("SELECT * FROM booking_logs")).rows
+    expect(rows).toHaveLength(0)
+  })
+
+  it("skips calendar operations when room has no calendar ID", async () => {
+    const stripe = makeMockStripe()
+    const calendar = makeMockCalendar({ calendarId: null })
+
+    const result = await createCheckoutSession(stripe, sql, calendar, validInput)
+
+    expect(result.url).toBe(FAKE_CHECKOUT_URL)
+    expect(calendar.calls.areDatesFree).toBe(0)
+    expect(calendar.calls.createHoldEvent).toBe(0)
+  })
+
+  it("does not include calendarId/holdEventId in metadata when room has no calendar", async () => {
+    let capturedParams: Stripe.Checkout.SessionCreateParams | null = null
+    const stripe = {
+      checkout: {
+        sessions: {
+          create: async (params: Stripe.Checkout.SessionCreateParams) => {
+            capturedParams = params
+            return { id: FAKE_SESSION_ID, url: FAKE_CHECKOUT_URL }
+          },
+        },
+      },
+    } as unknown as Stripe
+    const calendar = makeMockCalendar({ calendarId: null })
+
+    await createCheckoutSession(stripe, sql, calendar, validInput)
+
+    expect(capturedParams!.metadata!.calendarId).toBeUndefined()
+    expect(capturedParams!.metadata!.holdEventId).toBeUndefined()
+  })
+
+  it("cleans up hold event if Stripe session creation fails", async () => {
+    const stripe = {
+      checkout: {
+        sessions: {
+          create: async () => { throw new Error("Stripe is down") },
+        },
+      },
+    } as unknown as Stripe
+    const calendar = makeMockCalendar({ datesFree: true })
+
+    try {
+      await createCheckoutSession(stripe, sql, calendar, validInput)
+    } catch { /* expected */ }
+
+    expect(calendar.calls.deleteHoldEvent).toBe(1)
+    expect(calendar.deletedEvents).toEqual([FAKE_EVENT_ID])
   })
 })
 
@@ -273,8 +488,9 @@ describe("retrieveCheckoutSession", () => {
   it("returns session data when payment is successful", async () => {
     await insertPendingLog()
     const stripe = makeMockStripe({ paymentStatus: "paid" })
+    const calendar = makeMockCalendar()
 
-    const result = await retrieveCheckoutSession(stripe, sql, FAKE_SESSION_ID)
+    const result = await retrieveCheckoutSession(stripe, sql, calendar, FAKE_SESSION_ID)
 
     expect(result.paymentStatus).toBe("paid")
     expect(result.customerEmail).toBe("test@example.com")
@@ -285,8 +501,9 @@ describe("retrieveCheckoutSession", () => {
   it("updates booking log status to 'paid' on successful payment", async () => {
     await insertPendingLog()
     const stripe = makeMockStripe({ paymentStatus: "paid" })
+    const calendar = makeMockCalendar()
 
-    await retrieveCheckoutSession(stripe, sql, FAKE_SESSION_ID)
+    await retrieveCheckoutSession(stripe, sql, calendar, FAKE_SESSION_ID)
 
     const rows = (await db.query("SELECT status FROM booking_logs WHERE stripe_session_id = $1", [FAKE_SESSION_ID])).rows as Record<string, unknown>[]
     expect(rows[0].status).toBe("paid")
@@ -295,8 +512,9 @@ describe("retrieveCheckoutSession", () => {
   it("updates booking log status to 'cancelled' on unpaid session", async () => {
     await insertPendingLog()
     const stripe = makeMockStripe({ paymentStatus: "unpaid" })
+    const calendar = makeMockCalendar()
 
-    await retrieveCheckoutSession(stripe, sql, FAKE_SESSION_ID)
+    await retrieveCheckoutSession(stripe, sql, calendar, FAKE_SESSION_ID)
 
     const rows = (await db.query("SELECT status FROM booking_logs WHERE stripe_session_id = $1", [FAKE_SESSION_ID])).rows as Record<string, unknown>[]
     expect(rows[0].status).toBe("cancelled")
@@ -305,11 +523,12 @@ describe("retrieveCheckoutSession", () => {
   it("does not update a log that is already 'paid' (idempotency)", async () => {
     await insertPendingLog()
     const stripePaid = makeMockStripe({ paymentStatus: "paid" })
-    await retrieveCheckoutSession(stripePaid, sql, FAKE_SESSION_ID)
+    const calendar = makeMockCalendar()
+    await retrieveCheckoutSession(stripePaid, sql, calendar, FAKE_SESSION_ID)
 
     // Second call with a mock that would return "unpaid" — should NOT overwrite "paid"
     const stripeUnpaid = makeMockStripe({ paymentStatus: "unpaid" })
-    await retrieveCheckoutSession(stripeUnpaid, sql, FAKE_SESSION_ID)
+    await retrieveCheckoutSession(stripeUnpaid, sql, calendar, FAKE_SESSION_ID)
 
     const rows = (await db.query("SELECT status FROM booking_logs WHERE stripe_session_id = $1", [FAKE_SESSION_ID])).rows as Record<string, unknown>[]
     expect(rows[0].status).toBe("paid")
@@ -318,11 +537,12 @@ describe("retrieveCheckoutSession", () => {
   it("does not update a log that is already 'cancelled' (idempotency)", async () => {
     await insertPendingLog()
     const stripeCancelled = makeMockStripe({ paymentStatus: "unpaid" })
-    await retrieveCheckoutSession(stripeCancelled, sql, FAKE_SESSION_ID)
+    const calendar = makeMockCalendar()
+    await retrieveCheckoutSession(stripeCancelled, sql, calendar, FAKE_SESSION_ID)
 
     // Second call with "paid" — should NOT overwrite "cancelled"
     const stripePaid = makeMockStripe({ paymentStatus: "paid" })
-    await retrieveCheckoutSession(stripePaid, sql, FAKE_SESSION_ID)
+    await retrieveCheckoutSession(stripePaid, sql, calendar, FAKE_SESSION_ID)
 
     const rows = (await db.query("SELECT status FROM booking_logs WHERE stripe_session_id = $1", [FAKE_SESSION_ID])).rows as Record<string, unknown>[]
     expect(rows[0].status).toBe("cancelled")
@@ -330,11 +550,50 @@ describe("retrieveCheckoutSession", () => {
 
   it("handles missing booking log gracefully (no row to update)", async () => {
     const stripe = makeMockStripe({ paymentStatus: "paid" })
+    const calendar = makeMockCalendar()
 
     // Should not throw even though there's no matching row
-    const result = await retrieveCheckoutSession(stripe, sql, "cs_nonexistent")
+    const result = await retrieveCheckoutSession(stripe, sql, calendar, "cs_nonexistent")
 
     expect(result.paymentStatus).toBe("paid")
+  })
+
+  it("deletes the hold event when payment is cancelled", async () => {
+    await insertPendingLog()
+    const stripe = makeMockStripe({
+      paymentStatus: "unpaid",
+      metadata: { calendarId: FAKE_CALENDAR_ID, holdEventId: FAKE_EVENT_ID },
+    })
+    const calendar = makeMockCalendar()
+
+    await retrieveCheckoutSession(stripe, sql, calendar, FAKE_SESSION_ID)
+
+    expect(calendar.calls.deleteHoldEvent).toBe(1)
+    expect(calendar.deletedEvents).toEqual([FAKE_EVENT_ID])
+  })
+
+  it("confirms the hold event when payment is successful", async () => {
+    await insertPendingLog()
+    const stripe = makeMockStripe({
+      paymentStatus: "paid",
+      metadata: { calendarId: FAKE_CALENDAR_ID, holdEventId: FAKE_EVENT_ID },
+    })
+    const calendar = makeMockCalendar()
+
+    await retrieveCheckoutSession(stripe, sql, calendar, FAKE_SESSION_ID)
+
+    expect(calendar.calls.confirmHoldEvent).toBe(1)
+    expect(calendar.calls.deleteHoldEvent).toBe(0)
+  })
+
+  it("does not attempt deletion when no holdEventId in metadata", async () => {
+    await insertPendingLog()
+    const stripe = makeMockStripe({ paymentStatus: "unpaid", metadata: {} })
+    const calendar = makeMockCalendar()
+
+    await retrieveCheckoutSession(stripe, sql, calendar, FAKE_SESSION_ID)
+
+    expect(calendar.calls.deleteHoldEvent).toBe(0)
   })
 })
 
@@ -353,7 +612,8 @@ describe("handleGetSession", () => {
 
   it("returns 400 when session_id is null", async () => {
     const stripe = makeMockStripe()
-    const response = await handleGetSession(stripe, sql, null)
+    const calendar = makeMockCalendar()
+    const response = await handleGetSession(stripe, sql, calendar, null)
 
     expect(response.status).toBe(400)
     expect(response.body).toEqual({ error: "Missing session_id" })
@@ -367,8 +627,9 @@ describe("handleGetSession", () => {
         },
       },
     } as unknown as Stripe
+    const calendar = makeMockCalendar()
 
-    const response = await handleGetSession(stripe, sql, "cs_invalid_id")
+    const response = await handleGetSession(stripe, sql, calendar, "cs_invalid_id")
 
     expect(response.status).toBe(404)
     expect(response.body).toEqual({ error: "Session not found" })
@@ -377,8 +638,9 @@ describe("handleGetSession", () => {
   it("returns 200 with session data on successful payment", async () => {
     await insertPendingLog()
     const stripe = makeMockStripe({ paymentStatus: "paid" })
+    const calendar = makeMockCalendar()
 
-    const response = await handleGetSession(stripe, sql, FAKE_SESSION_ID)
+    const response = await handleGetSession(stripe, sql, calendar, FAKE_SESSION_ID)
 
     expect(response.status).toBe(200)
     expect(response.body.paymentStatus).toBe("paid")
@@ -393,8 +655,9 @@ describe("handleGetSession", () => {
   it("returns 200 and updates log to 'paid'", async () => {
     await insertPendingLog()
     const stripe = makeMockStripe({ paymentStatus: "paid" })
+    const calendar = makeMockCalendar()
 
-    await handleGetSession(stripe, sql, FAKE_SESSION_ID)
+    await handleGetSession(stripe, sql, calendar, FAKE_SESSION_ID)
 
     const rows = (await db.query("SELECT status FROM booking_logs WHERE stripe_session_id = $1", [FAKE_SESSION_ID])).rows as Record<string, unknown>[]
     expect(rows[0].status).toBe("paid")
@@ -403,8 +666,9 @@ describe("handleGetSession", () => {
   it("returns 200 and updates log to 'cancelled' on unpaid session", async () => {
     await insertPendingLog()
     const stripe = makeMockStripe({ paymentStatus: "unpaid" })
+    const calendar = makeMockCalendar()
 
-    const response = await handleGetSession(stripe, sql, FAKE_SESSION_ID)
+    const response = await handleGetSession(stripe, sql, calendar, FAKE_SESSION_ID)
 
     expect(response.status).toBe(200)
     expect(response.body.paymentStatus).toBe("unpaid")
@@ -416,10 +680,11 @@ describe("handleGetSession", () => {
   it("does not update an already-paid log on subsequent call", async () => {
     await insertPendingLog()
     const stripePaid = makeMockStripe({ paymentStatus: "paid" })
-    await handleGetSession(stripePaid, sql, FAKE_SESSION_ID)
+    const calendar = makeMockCalendar()
+    await handleGetSession(stripePaid, sql, calendar, FAKE_SESSION_ID)
 
     const stripeUnpaid = makeMockStripe({ paymentStatus: "unpaid" })
-    await handleGetSession(stripeUnpaid, sql, FAKE_SESSION_ID)
+    await handleGetSession(stripeUnpaid, sql, calendar, FAKE_SESSION_ID)
 
     const rows = (await db.query("SELECT status FROM booking_logs WHERE stripe_session_id = $1", [FAKE_SESSION_ID])).rows as Record<string, unknown>[]
     expect(rows[0].status).toBe("paid")
@@ -427,8 +692,9 @@ describe("handleGetSession", () => {
 
   it("returns 200 even when no booking log exists for the session", async () => {
     const stripe = makeMockStripe({ paymentStatus: "paid" })
+    const calendar = makeMockCalendar()
 
-    const response = await handleGetSession(stripe, sql, FAKE_SESSION_ID)
+    const response = await handleGetSession(stripe, sql, calendar, FAKE_SESSION_ID)
 
     expect(response.status).toBe(200)
     expect(response.body.paymentStatus).toBe("paid")
