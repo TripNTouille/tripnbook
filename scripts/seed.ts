@@ -87,6 +87,7 @@ async function seed() {
     CREATE TABLE IF NOT EXISTS booking_logs (
       id SERIAL PRIMARY KEY,
       room_name TEXT NOT NULL,
+      full_name TEXT,
       adults_count INTEGER NOT NULL,
       children_count INTEGER NOT NULL,
       check_in TEXT NOT NULL,
@@ -100,6 +101,11 @@ async function seed() {
       status TEXT NOT NULL DEFAULT 'pending',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
+  `;
+
+  // Add full_name column if it doesn't exist yet (for existing databases)
+  await sql`
+    ALTER TABLE booking_logs ADD COLUMN IF NOT EXISTS full_name TEXT
   `;
 
   console.log("✅ Seeded rooms, room_capacities, and booking_logs tables");

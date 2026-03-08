@@ -55,6 +55,7 @@ export default function BookingForm({ roomId, roomName, capacity, busyDates }: B
         <BookingDialog
           open={true}
           onOpenChange={(open) => { if (!open) setDialogDates(null) }}
+          roomId={roomId}
           roomName={roomName}
           adultsCount={adultsCount}
           childrenCount={childrenCount}

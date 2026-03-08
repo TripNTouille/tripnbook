@@ -1,7 +1,7 @@
-import { google } from "googleapis"
-import { addDays, addMonths, startOfDay, startOfMonth } from "date-fns"
+import { google, calendar_v3 } from "googleapis"
+import { addDays, addMonths, startOfDay, startOfMonth, format } from "date-fns"
 
-const SCOPES = ["https://www.googleapis.com/auth/calendar.readonly"]
+const SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
 function getAuth() {
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL
@@ -17,6 +17,10 @@ function getAuth() {
     key: privateKey.replace(/\\n/g, "\n"),
     scopes: SCOPES,
   })
+}
+
+function getCalendarClient(): calendar_v3.Calendar {
+  return google.calendar({ version: "v3", auth: getAuth() })
 }
 
 /**
@@ -36,8 +40,7 @@ export async function getBusyDates(
   from: Date,
   to: Date,
 ): Promise<Date[]> {
-  const auth = getAuth()
-  const calendar = google.calendar({ version: "v3", auth })
+  const calendar = getCalendarClient()
 
   // Split into monthly chunks to stay under Google's time range limit
   const chunks: { start: Date; end: Date }[] = []
@@ -80,4 +83,89 @@ export async function getBusyDates(
   }
 
   return bookedNights
+}
+
+/**
+ * Checks whether all nights in a date range are free on the given calendar.
+ */
+export async function areDatesFree(
+  calendarId: string,
+  checkIn: Date,
+  checkOut: Date,
+): Promise<boolean> {
+  const busyDates = await getBusyDates(calendarId, checkIn, checkOut)
+  return busyDates.length === 0
+}
+
+export type HoldEventInfo = {
+  fullName: string
+  email: string
+  phone: string
+  specialNeeds: string
+}
+
+/**
+ * Creates a temporary "hold" event on the calendar while the guest completes payment.
+ * Returns the created event ID so it can be cleaned up if payment is cancelled.
+ *
+ * The event spans from check-in day 16:00 to check-out day 11:00,
+ * matching the convention used for actual bookings.
+ */
+export async function createHoldEvent(
+  calendarId: string,
+  checkIn: Date,
+  checkOut: Date,
+  guest: HoldEventInfo,
+): Promise<string> {
+  const calendar = getCalendarClient()
+
+  const checkInLabel = format(checkIn, "yyyy-MM-dd")
+  const checkOutLabel = format(checkOut, "yyyy-MM-dd")
+  const createdAt = format(new Date(), "dd/MM/yyyy HH:mm")
+
+  const descriptionLines = [
+    `Réservation via Trip'n Book — en attente de paiement`,
+    ``,
+    `Nom : ${guest.fullName}`,
+    `Email : ${guest.email}`,
+    `Téléphone : ${guest.phone}`,
+    ...(guest.specialNeeds ? [`Demandes : ${guest.specialNeeds}`] : []),
+    ``,
+    `Créé le ${createdAt}`,
+  ]
+
+  const response = await calendar.events.insert({
+    calendarId,
+    requestBody: {
+      summary: `⏳ Trip'n Book — ${guest.fullName}`,
+      description: descriptionLines.join("\n"),
+      start: { dateTime: `${checkInLabel}T16:00:00`, timeZone: "Europe/Paris" },
+      end: { dateTime: `${checkOutLabel}T11:00:00`, timeZone: "Europe/Paris" },
+    },
+  })
+
+  const eventId = response.data.id
+  if (!eventId) {
+    throw new Error("Google Calendar did not return an event ID")
+  }
+
+  return eventId
+}
+
+/**
+ * Deletes a hold event (e.g. after payment cancellation or expiry).
+ * Silently ignores "not found" errors — the event may have already been removed.
+ */
+export async function deleteHoldEvent(
+  calendarId: string,
+  eventId: string,
+): Promise<void> {
+  const calendar = getCalendarClient()
+
+  try {
+    await calendar.events.delete({ calendarId, eventId })
+  } catch (err: unknown) {
+    const isNotFound = err instanceof Error && "code" in err && (err as { code: number }).code === 404
+    if (!isNotFound) throw err
+  }
 }

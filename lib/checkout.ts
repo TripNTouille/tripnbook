@@ -1,4 +1,5 @@
 import type Stripe from "stripe"
+import type { HoldEventInfo } from "./google-calendar"
 
 type JsonResponse = {
   status: number
@@ -14,14 +15,28 @@ export type SqlExecutor = (
   ...values: unknown[]
 ) => Promise<Record<string, unknown>[]>
 
+/**
+ * Calendar operations needed by checkout, injected for testability.
+ */
+export type CalendarDeps = {
+  getCalendarId: (roomId: number) => Promise<string | null>
+  areDatesFree: (calendarId: string, checkIn: Date, checkOut: Date) => Promise<boolean>
+  createHoldEvent: (calendarId: string, checkIn: Date, checkOut: Date, guest: HoldEventInfo) => Promise<string>
+  deleteHoldEvent: (calendarId: string, eventId: string) => Promise<void>
+}
+
 export type CheckoutInput = {
+  roomId: number
   roomName: string
   adultsCount: number
   childrenCount: number
   from: string
   to: string
+  fromDate: string // ISO date for calendar operations
+  toDate: string   // ISO date for calendar operations
   nightCount: number
   totalPrice: number
+  fullName: string
   email: string
   phone: string
   specialNeeds: string
@@ -43,16 +58,21 @@ export type SessionResult = {
 export async function createCheckoutSession(
   stripe: Stripe,
   sql: SqlExecutor,
+  calendar: CalendarDeps,
   input: CheckoutInput,
 ): Promise<CheckoutResult> {
   const {
+    roomId,
     roomName,
     adultsCount,
     childrenCount,
     from,
     to,
+    fromDate,
+    toDate,
     nightCount,
     totalPrice,
+    fullName,
     email,
     phone,
     specialNeeds,
@@ -60,45 +80,77 @@ export async function createCheckoutSession(
     origin,
   } = input
 
+  const checkIn = new Date(fromDate)
+  const checkOut = new Date(toDate)
+
+  // Block the dates on Google Calendar before creating the Stripe session
+  const calendarId = await calendar.getCalendarId(roomId)
+  let holdEventId: string | null = null
+
+  if (calendarId) {
+    const free = await calendar.areDatesFree(calendarId, checkIn, checkOut)
+    if (!free) {
+      throw new DatesUnavailableError()
+    }
+    holdEventId = await calendar.createHoldEvent(calendarId, checkIn, checkOut, {
+      fullName,
+      email,
+      phone,
+      specialNeeds,
+    })
+  }
+
   const totalGuests = adultsCount + childrenCount
   const guestLabel = `${totalGuests} pers. (${adultsCount} ad.${childrenCount > 0 ? `, ${childrenCount} enf.` : ""})`
 
-  const session = await stripe.checkout.sessions.create({
-    mode: "payment",
-    customer_email: email,
-    line_items: [
-      {
-        price_data: {
-          currency: "eur",
-          unit_amount: totalPrice * 100,
-          product_data: {
-            name: `${roomName} — ${nightCount} ${nightCount > 1 ? "nuits" : "nuit"}`,
-            description: `${guestLabel} · du ${from} au ${to} · Petit-déjeuner inclus`,
+  let session: Stripe.Checkout.Session
+  try {
+    session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      customer_email: email,
+      line_items: [
+        {
+          price_data: {
+            currency: "eur",
+            unit_amount: totalPrice * 100,
+            product_data: {
+              name: `${roomName} — ${nightCount} ${nightCount > 1 ? "nuits" : "nuit"}`,
+              description: `${guestLabel} · du ${from} au ${to} · Petit-déjeuner inclus`,
+            },
           },
+          quantity: 1,
         },
-        quantity: 1,
+      ],
+      metadata: {
+        roomName,
+        fullName,
+        adultsCount: String(adultsCount),
+        childrenCount: String(childrenCount),
+        from,
+        to,
+        nightCount: String(nightCount),
+        phone,
+        specialNeeds,
+        ...(calendarId && { calendarId }),
+        ...(holdEventId && { holdEventId }),
       },
-    ],
-    metadata: {
-      roomName,
-      adultsCount: String(adultsCount),
-      childrenCount: String(childrenCount),
-      from,
-      to,
-      nightCount: String(nightCount),
-      phone,
-      specialNeeds,
-    },
-    success_url: `${origin}${returnUrl}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${origin}${returnUrl}?checkout=cancelled&session_id={CHECKOUT_SESSION_ID}`,
-  })
+      success_url: `${origin}${returnUrl}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}${returnUrl}?checkout=cancelled&session_id={CHECKOUT_SESSION_ID}`,
+    })
+  } catch (err) {
+    // Clean up the hold event if Stripe session creation fails
+    if (calendarId && holdEventId) {
+      await calendar.deleteHoldEvent(calendarId, holdEventId)
+    }
+    throw err
+  }
 
   await sql`
     INSERT INTO booking_logs
-      (room_name, adults_count, children_count, check_in, check_out,
+      (room_name, full_name, adults_count, children_count, check_in, check_out,
        night_count, total_price, email, phone, special_needs, stripe_session_id)
     VALUES
-      (${roomName}, ${adultsCount}, ${childrenCount}, ${from}, ${to},
+      (${roomName}, ${fullName}, ${adultsCount}, ${childrenCount}, ${from}, ${to},
        ${nightCount}, ${totalPrice}, ${email}, ${phone}, ${specialNeeds || null}, ${session.id})
   `
 
@@ -108,6 +160,7 @@ export async function createCheckoutSession(
 export async function retrieveCheckoutSession(
   stripe: Stripe,
   sql: SqlExecutor,
+  calendar: CalendarDeps,
   sessionId: string,
 ): Promise<SessionResult> {
   const session = await stripe.checkout.sessions.retrieve(sessionId)
@@ -118,6 +171,15 @@ export async function retrieveCheckoutSession(
     SET status = ${status}
     WHERE stripe_session_id = ${sessionId} AND status = 'pending'
   `
+
+  // Delete the hold event if payment was cancelled
+  if (status === "cancelled") {
+    const calendarId = session.metadata?.calendarId
+    const holdEventId = session.metadata?.holdEventId
+    if (calendarId && holdEventId) {
+      await calendar.deleteHoldEvent(calendarId, holdEventId)
+    }
+  }
 
   return {
     paymentStatus: session.payment_status,
@@ -130,6 +192,7 @@ export async function retrieveCheckoutSession(
 export async function handleGetSession(
   stripe: Stripe,
   sql: SqlExecutor,
+  calendar: CalendarDeps,
   sessionId: string | null,
 ): Promise<JsonResponse> {
   if (!sessionId) {
@@ -137,9 +200,16 @@ export async function handleGetSession(
   }
 
   try {
-    const result = await retrieveCheckoutSession(stripe, sql, sessionId)
+    const result = await retrieveCheckoutSession(stripe, sql, calendar, sessionId)
     return { status: 200, body: result as unknown as Record<string, unknown> }
   } catch {
     return { status: 404, body: { error: "Session not found" } }
+  }
+}
+
+export class DatesUnavailableError extends Error {
+  constructor() {
+    super("Les dates sélectionnées ne sont plus disponibles")
+    this.name = "DatesUnavailableError"
   }
 }
