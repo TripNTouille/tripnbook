@@ -56,6 +56,7 @@ function makeMockStripe(overrides: {
         retrieve: async () => ({
           id: sessionId,
           url: FAKE_CHECKOUT_URL,
+          payment_intent: "pi_test_abc123",
           payment_status: paymentStatus,
           customer_email: "test@example.com",
           amount_total: 22500,
@@ -90,6 +91,7 @@ function makeMockCalendar(overrides: {
     getCalendarId: number
     areDatesFree: number
     createHoldEvent: number
+    confirmHoldEvent: number
     deleteHoldEvent: number
   }
   deletedEvents: string[]
@@ -98,7 +100,7 @@ function makeMockCalendar(overrides: {
   const datesFree = overrides.datesFree ?? true
   const holdEventId = overrides.holdEventId ?? FAKE_EVENT_ID
 
-  const calls = { getCalendarId: 0, areDatesFree: 0, createHoldEvent: 0, deleteHoldEvent: 0 }
+  const calls = { getCalendarId: 0, areDatesFree: 0, createHoldEvent: 0, confirmHoldEvent: 0, deleteHoldEvent: 0 }
   const deletedEvents: string[] = []
 
   return {
@@ -115,6 +117,9 @@ function makeMockCalendar(overrides: {
     createHoldEvent: async () => {
       calls.createHoldEvent++
       return holdEventId
+    },
+    confirmHoldEvent: async () => {
+      calls.confirmHoldEvent++
     },
     deleteHoldEvent: async (_calendarId, eventId) => {
       calls.deleteHoldEvent++
@@ -567,7 +572,7 @@ describe("retrieveCheckoutSession", () => {
     expect(calendar.deletedEvents).toEqual([FAKE_EVENT_ID])
   })
 
-  it("does not delete the hold event when payment is successful", async () => {
+  it("confirms the hold event when payment is successful", async () => {
     await insertPendingLog()
     const stripe = makeMockStripe({
       paymentStatus: "paid",
@@ -577,6 +582,7 @@ describe("retrieveCheckoutSession", () => {
 
     await retrieveCheckoutSession(stripe, sql, calendar, FAKE_SESSION_ID)
 
+    expect(calendar.calls.confirmHoldEvent).toBe(1)
     expect(calendar.calls.deleteHoldEvent).toBe(0)
   })
 

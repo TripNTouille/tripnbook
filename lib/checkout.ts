@@ -22,6 +22,7 @@ export type CalendarDeps = {
   getCalendarId: (roomId: number) => Promise<string | null>
   areDatesFree: (calendarId: string, checkIn: Date, checkOut: Date) => Promise<boolean>
   createHoldEvent: (calendarId: string, checkIn: Date, checkOut: Date, guest: HoldEventInfo) => Promise<string>
+  confirmHoldEvent: (calendarId: string, eventId: string, paymentIntentId: string) => Promise<void>
   deleteHoldEvent: (calendarId: string, eventId: string) => Promise<void>
 }
 
@@ -172,11 +173,16 @@ export async function retrieveCheckoutSession(
     WHERE stripe_session_id = ${sessionId} AND status = 'pending'
   `
 
-  // Delete the hold event if payment was cancelled
-  if (status === "cancelled") {
-    const calendarId = session.metadata?.calendarId
-    const holdEventId = session.metadata?.holdEventId
-    if (calendarId && holdEventId) {
+  const calendarId = session.metadata?.calendarId
+  const holdEventId = session.metadata?.holdEventId
+
+  if (calendarId && holdEventId) {
+    if (status === "paid") {
+      const paymentIntent = typeof session.payment_intent === "string"
+        ? session.payment_intent
+        : session.payment_intent?.id ?? sessionId
+      await calendar.confirmHoldEvent(calendarId, holdEventId, paymentIntent)
+    } else {
       await calendar.deleteHoldEvent(calendarId, holdEventId)
     }
   }

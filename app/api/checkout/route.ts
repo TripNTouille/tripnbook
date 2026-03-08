@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import Stripe from "stripe"
 import { getDb } from "@/lib/db"
 import { getRoom } from "@/lib/rooms"
-import { areDatesFree, createHoldEvent, deleteHoldEvent } from "@/lib/google-calendar"
+import { areDatesFree, createHoldEvent, confirmHoldEvent, deleteHoldEvent } from "@/lib/google-calendar"
 import { createCheckoutSession, DatesUnavailableError, type CalendarDeps } from "@/lib/checkout"
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -16,6 +16,7 @@ const calendar: CalendarDeps = {
   },
   areDatesFree,
   createHoldEvent,
+  confirmHoldEvent,
   deleteHoldEvent,
 }
 

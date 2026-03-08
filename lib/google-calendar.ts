@@ -104,6 +104,8 @@ export type HoldEventInfo = {
   specialNeeds: string
 }
 
+const STRIPE_DASHBOARD_URL = "https://dashboard.stripe.com/payments"
+
 /**
  * Creates a temporary "hold" event on the calendar while the guest completes payment.
  * Returns the created event ID so it can be cleaned up if payment is cancelled.
@@ -150,6 +152,30 @@ export async function createHoldEvent(
   }
 
   return eventId
+}
+
+/**
+ * Updates the hold event after successful payment:
+ * removes the ⏳ pending marker and appends a Stripe payment link to the description.
+ */
+export async function confirmHoldEvent(
+  calendarId: string,
+  eventId: string,
+  paymentIntentId: string,
+): Promise<void> {
+  const calendar = getCalendarClient()
+
+  const event = await calendar.events.get({ calendarId, eventId })
+  const summary = (event.data.summary ?? "").replace("⏳ ", "✅ ")
+  const description = (event.data.description ?? "")
+    .replace("en attente de paiement", "payé")
+    + `\nStripe : ${STRIPE_DASHBOARD_URL}/${paymentIntentId}`
+
+  await calendar.events.patch({
+    calendarId,
+    eventId,
+    requestBody: { summary, description },
+  })
 }
 
 /**
