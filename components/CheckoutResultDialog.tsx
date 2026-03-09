@@ -46,8 +46,6 @@ export default function CheckoutResultDialog() {
     if (!sessionId) return
 
     if (checkout === "cancelled") {
-      // Fire-and-forget: update the booking log status to 'cancelled'
-      fetch(`/api/checkout/session?session_id=${sessionId}`)
       setResult({ status: "cancelled" })
       return
     }
