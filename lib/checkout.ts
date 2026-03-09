@@ -1,6 +1,7 @@
 import { parseISO } from "date-fns"
 import type Stripe from "stripe"
 import type { HoldEventInfo } from "./google-calendar"
+import type { BookingConfirmationData } from "./email"
 
 // Stripe event types handled by the webhook
 const HANDLED_EVENTS = ["checkout.session.completed", "checkout.session.expired"] as const
@@ -28,6 +29,10 @@ export type CalendarDeps = {
   createHoldEvent: (calendarId: string, checkIn: Date, checkOut: Date, guest: HoldEventInfo) => Promise<string>
   confirmHoldEvent: (calendarId: string, eventId: string, paymentIntentId: string) => Promise<void>
   deleteHoldEvent: (calendarId: string, eventId: string) => Promise<void>
+}
+
+export type EmailDeps = {
+  sendConfirmation: (data: BookingConfirmationData) => Promise<void>
 }
 
 export type CheckoutInput = {
@@ -169,11 +174,12 @@ export async function retrieveCheckoutSession(
   stripe: Stripe,
   sql: SqlExecutor,
   calendar: CalendarDeps,
+  email: EmailDeps,
   sessionId: string,
 ): Promise<SessionResult> {
   const session = await stripe.checkout.sessions.retrieve(sessionId)
 
-  await fulfillSession(sql, calendar, session)
+  await fulfillSession(sql, calendar, email, session)
 
   return {
     paymentStatus: session.payment_status,
@@ -187,6 +193,7 @@ export async function handleGetSession(
   stripe: Stripe,
   sql: SqlExecutor,
   calendar: CalendarDeps,
+  email: EmailDeps,
   sessionId: string | null,
 ): Promise<JsonResponse> {
   if (!sessionId) {
@@ -194,7 +201,7 @@ export async function handleGetSession(
   }
 
   try {
-    const result = await retrieveCheckoutSession(stripe, sql, calendar, sessionId)
+    const result = await retrieveCheckoutSession(stripe, sql, calendar, email, sessionId)
     return { status: 200, body: result as unknown as Record<string, unknown> }
   } catch {
     return { status: 404, body: { error: "Session not found" } }
@@ -220,15 +227,17 @@ export class DatesUnavailableError extends Error {
 export async function fulfillSession(
   sql: SqlExecutor,
   calendar: CalendarDeps,
+  email: EmailDeps,
   session: Stripe.Checkout.Session,
 ): Promise<void> {
   const isPaid = session.payment_status === "paid"
   const newStatus = isPaid ? "paid" : "cancelled"
 
-  await sql`
+  const updatedRows = await sql`
     UPDATE booking_logs
     SET status = ${newStatus}
     WHERE stripe_session_id = ${session.id} AND status = 'pending'
+    RETURNING *
   `
 
   const calendarId = session.metadata?.calendarId
@@ -244,6 +253,24 @@ export async function fulfillSession(
       await calendar.deleteHoldEvent(calendarId, holdEventId)
     }
   }
+
+  // Only send the email when this call actually transitioned the row from
+  // 'pending' to 'paid' — guards against sending duplicates on replayed events.
+  const wasJustPaid = isPaid && updatedRows.length > 0
+  if (wasJustPaid) {
+    const meta = session.metadata ?? {}
+    await email.sendConfirmation({
+      guestEmail: session.customer_email ?? "",
+      guestName: meta.fullName ?? "",
+      roomName: meta.roomName ?? "",
+      adultsCount: Number(meta.adultsCount ?? 0),
+      childrenCount: Number(meta.childrenCount ?? 0),
+      from: meta.from ?? "",
+      to: meta.to ?? "",
+      nightCount: Number(meta.nightCount ?? 0),
+      totalPrice: Math.round((session.amount_total ?? 0) / 100),
+    })
+  }
 }
 
 /**
@@ -256,6 +283,7 @@ export async function handleWebhookEvent(
   stripe: Stripe,
   sql: SqlExecutor,
   calendar: CalendarDeps,
+  email: EmailDeps,
   rawBody: Buffer,
   signature: string,
   webhookSecret: string,
@@ -275,7 +303,7 @@ export async function handleWebhookEvent(
   }
 
   const session = event.data.object as Stripe.Checkout.Session
-  await fulfillSession(sql, calendar, session)
+  await fulfillSession(sql, calendar, email, session)
 
   return { status: 200, body: { received: true } }
 }
