@@ -1,3 +1,4 @@
+import { parseISO } from "date-fns"
 import type Stripe from "stripe"
 import type { HoldEventInfo } from "./google-calendar"
 
@@ -84,8 +85,11 @@ export async function createCheckoutSession(
     origin,
   } = input
 
-  const checkIn = new Date(fromDate)
-  const checkOut = new Date(toDate)
+  // parseISO("2025-04-17") → local midnight, safe across timezones.
+  // new Date("2025-04-17") → UTC midnight, which shifts the date on servers
+  // not in UTC (e.g. a Paris browser sending dates to a UTC Vercel server).
+  const checkIn = parseISO(fromDate)
+  const checkOut = parseISO(toDate)
 
   // Block the dates on Google Calendar before creating the Stripe session
   const calendarId = await calendar.getCalendarId(roomId)
