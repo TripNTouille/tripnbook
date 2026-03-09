@@ -40,3 +40,4 @@ jobs:
           STRIPE_WEBHOOK_SECRET: whsec_placeholder
           GOOGLE_CLIENT_EMAIL: placeholder@example.iam.gserviceaccount.com
           GOOGLE_PRIVATE_KEY: placeholder
+          RESEND_API_KEY: resend_placeholder
