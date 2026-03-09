@@ -1,5 +1,9 @@
+import { parseISO } from "date-fns"
 import type Stripe from "stripe"
 import type { HoldEventInfo } from "./google-calendar"
+
+// Stripe event types handled by the webhook
+const HANDLED_EVENTS = ["checkout.session.completed", "checkout.session.expired"] as const
 
 type JsonResponse = {
   status: number
@@ -81,8 +85,11 @@ export async function createCheckoutSession(
     origin,
   } = input
 
-  const checkIn = new Date(fromDate)
-  const checkOut = new Date(toDate)
+  // parseISO("2025-04-17") → local midnight, safe across timezones.
+  // new Date("2025-04-17") → UTC midnight, which shifts the date on servers
+  // not in UTC (e.g. a Paris browser sending dates to a UTC Vercel server).
+  const checkIn = parseISO(fromDate)
+  const checkOut = parseISO(toDate)
 
   // Block the dates on Google Calendar before creating the Stripe session
   const calendarId = await calendar.getCalendarId(roomId)
@@ -166,26 +173,7 @@ export async function retrieveCheckoutSession(
 ): Promise<SessionResult> {
   const session = await stripe.checkout.sessions.retrieve(sessionId)
 
-  const status = session.payment_status === "paid" ? "paid" : "cancelled"
-  await sql`
-    UPDATE booking_logs
-    SET status = ${status}
-    WHERE stripe_session_id = ${sessionId} AND status = 'pending'
-  `
-
-  const calendarId = session.metadata?.calendarId
-  const holdEventId = session.metadata?.holdEventId
-
-  if (calendarId && holdEventId) {
-    if (status === "paid") {
-      const paymentIntent = typeof session.payment_intent === "string"
-        ? session.payment_intent
-        : session.payment_intent?.id ?? sessionId
-      await calendar.confirmHoldEvent(calendarId, holdEventId, paymentIntent)
-    } else {
-      await calendar.deleteHoldEvent(calendarId, holdEventId)
-    }
-  }
+  await fulfillSession(sql, calendar, session)
 
   return {
     paymentStatus: session.payment_status,
@@ -218,4 +206,76 @@ export class DatesUnavailableError extends Error {
     super("Les dates sélectionnées ne sont plus disponibles")
     this.name = "DatesUnavailableError"
   }
+}
+
+/**
+ * Fulfils a booking from a pre-parsed Stripe session (used by the webhook handler).
+ *
+ * Unlike retrieveCheckoutSession, this does not re-fetch the session from Stripe —
+ * the webhook already delivers the full session object, so we use it directly.
+ *
+ * Idempotent: booking_logs rows are only updated when status = 'pending',
+ * so replayed webhook events are safe.
+ */
+export async function fulfillSession(
+  sql: SqlExecutor,
+  calendar: CalendarDeps,
+  session: Stripe.Checkout.Session,
+): Promise<void> {
+  const isPaid = session.payment_status === "paid"
+  const newStatus = isPaid ? "paid" : "cancelled"
+
+  await sql`
+    UPDATE booking_logs
+    SET status = ${newStatus}
+    WHERE stripe_session_id = ${session.id} AND status = 'pending'
+  `
+
+  const calendarId = session.metadata?.calendarId
+  const holdEventId = session.metadata?.holdEventId
+
+  if (calendarId && holdEventId) {
+    if (isPaid) {
+      const paymentIntent = typeof session.payment_intent === "string"
+        ? session.payment_intent
+        : session.payment_intent?.id ?? session.id
+      await calendar.confirmHoldEvent(calendarId, holdEventId, paymentIntent)
+    } else {
+      await calendar.deleteHoldEvent(calendarId, holdEventId)
+    }
+  }
+}
+
+/**
+ * Handles an incoming Stripe webhook request.
+ *
+ * Verifies the signature, then fulfils the booking for handled event types.
+ * Returns a JsonResponse so the route handler stays thin and the logic is testable.
+ */
+export async function handleWebhookEvent(
+  stripe: Stripe,
+  sql: SqlExecutor,
+  calendar: CalendarDeps,
+  rawBody: Buffer,
+  signature: string,
+  webhookSecret: string,
+): Promise<JsonResponse> {
+  let event: Stripe.Event
+  try {
+    event = stripe.webhooks.constructEvent(rawBody, signature, webhookSecret)
+  } catch {
+    // Invalid signature — reject immediately
+    return { status: 400, body: { error: "Invalid webhook signature" } }
+  }
+
+  const isHandled = (HANDLED_EVENTS as readonly string[]).includes(event.type)
+  if (!isHandled) {
+    // Acknowledge unhandled event types so Stripe doesn't retry them
+    return { status: 200, body: { received: true } }
+  }
+
+  const session = event.data.object as Stripe.Checkout.Session
+  await fulfillSession(sql, calendar, session)
+
+  return { status: 200, body: { received: true } }
 }

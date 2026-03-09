@@ -37,5 +37,6 @@ jobs:
         run: npm run build
         env:
           STRIPE_SECRET_KEY: sk_test_placeholder
+          STRIPE_WEBHOOK_SECRET: whsec_placeholder
           GOOGLE_CLIENT_EMAIL: placeholder@example.iam.gserviceaccount.com
           GOOGLE_PRIVATE_KEY: placeholder

@@ -5,6 +5,8 @@ import {
   createCheckoutSession,
   retrieveCheckoutSession,
   handleGetSession,
+  fulfillSession,
+  handleWebhookEvent,
   DatesUnavailableError,
   type SqlExecutor,
   type CalendarDeps,
@@ -42,6 +44,26 @@ function makeMockStripe(overrides: {
   const sessionId = overrides.sessionId ?? FAKE_SESSION_ID
   const paymentStatus = overrides.paymentStatus ?? "paid"
 
+  const session = {
+    id: sessionId,
+    url: FAKE_CHECKOUT_URL,
+    payment_intent: "pi_test_abc123",
+    payment_status: paymentStatus,
+    customer_email: "test@example.com",
+    amount_total: 22500,
+    metadata: {
+      roomName: "Jules Verne",
+      adultsCount: "2",
+      childrenCount: "0",
+      from: "1 janv. 2026",
+      to: "4 janv. 2026",
+      nightCount: "3",
+      phone: "+33 6 00 00 00 00",
+      specialNeeds: "",
+      ...(overrides.metadata ?? {}),
+    },
+  }
+
   return {
     checkout: {
       sessions: {
@@ -53,34 +75,41 @@ function makeMockStripe(overrides: {
           amount_total: (params.line_items?.[0] as { price_data: { unit_amount: number } })?.price_data?.unit_amount ?? 0,
           metadata: params.metadata,
         }),
-        retrieve: async () => ({
-          id: sessionId,
-          url: FAKE_CHECKOUT_URL,
-          payment_intent: "pi_test_abc123",
-          payment_status: paymentStatus,
-          customer_email: "test@example.com",
-          amount_total: 22500,
-          metadata: {
-            roomName: "Jules Verne",
-            adultsCount: "2",
-            childrenCount: "0",
-            from: "1 janv. 2026",
-            to: "4 janv. 2026",
-            nightCount: "3",
-            phone: "+33 6 00 00 00 00",
-            specialNeeds: "",
-            ...(overrides.metadata ?? {}),
-          },
-        }),
+        retrieve: async () => session,
+      },
+    },
+    webhooks: {
+      constructEvent: (_payload: unknown, _sig: unknown, secret: string) => {
+        if (secret !== FAKE_WEBHOOK_SECRET) throw new Error("Invalid signature")
+        return { type: "checkout.session.completed", data: { object: session } } as unknown as Stripe.Event
       },
     },
   } as unknown as Stripe
+}
+
+/**
+ * Builds a minimal Stripe.Checkout.Session object for use in fulfillSession tests,
+ * without needing a full Stripe mock.
+ */
+function makeSession(overrides: {
+  paymentStatus?: string
+  metadata?: Record<string, string>
+} = {}): Stripe.Checkout.Session {
+  return {
+    id: FAKE_SESSION_ID,
+    payment_intent: "pi_test_abc123",
+    payment_status: overrides.paymentStatus ?? "paid",
+    metadata: {
+      ...(overrides.metadata ?? {}),
+    },
+  } as unknown as Stripe.Checkout.Session
 }
 
 // -- Calendar mock -----------------------------------------------------------
 
 const FAKE_EVENT_ID = "gcal_event_123"
 const FAKE_CALENDAR_ID = "room-calendar@group.calendar.google.com"
+const FAKE_WEBHOOK_SECRET = "whsec_test_secret"
 
 function makeMockCalendar(overrides: {
   calendarId?: string | null
@@ -137,8 +166,8 @@ const validInput = {
   childrenCount: 0,
   from: "1 janv. 2026",
   to: "4 janv. 2026",
-  fromDate: "2026-01-01T00:00:00.000Z",
-  toDate: "2026-01-04T00:00:00.000Z",
+  fromDate: "2026-01-01",
+  toDate: "2026-01-04",
   nightCount: 3,
   totalPrice: 225,
   fullName: "Jean Dupont",
@@ -698,5 +727,230 @@ describe("handleGetSession", () => {
 
     expect(response.status).toBe(200)
     expect(response.body.paymentStatus).toBe("paid")
+  })
+})
+
+// -- Tests: fulfillSession ---------------------------------------------------
+
+describe("fulfillSession", () => {
+  async function insertPendingLog() {
+    await sql`
+      INSERT INTO booking_logs
+        (room_name, full_name, adults_count, children_count, check_in, check_out,
+         night_count, total_price, email, phone, stripe_session_id)
+      VALUES
+        ('Jules Verne', 'Jean Dupont', 2, 0, '1 janv. 2026', '4 janv. 2026',
+         3, 225, 'test@example.com', '+33 6 00 00 00 00', ${FAKE_SESSION_ID})
+    `
+  }
+
+  it("updates booking log to 'paid' when session is paid", async () => {
+    await insertPendingLog()
+    const session = makeSession({ paymentStatus: "paid" })
+    const calendar = makeMockCalendar()
+
+    await fulfillSession(sql, calendar, session)
+
+    const rows = await sql`SELECT status FROM booking_logs WHERE stripe_session_id = ${FAKE_SESSION_ID}`
+    expect(rows[0].status).toBe("paid")
+  })
+
+  it("updates booking log to 'cancelled' when session is unpaid", async () => {
+    await insertPendingLog()
+    const session = makeSession({ paymentStatus: "unpaid" })
+    const calendar = makeMockCalendar()
+
+    await fulfillSession(sql, calendar, session)
+
+    const rows = await sql`SELECT status FROM booking_logs WHERE stripe_session_id = ${FAKE_SESSION_ID}`
+    expect(rows[0].status).toBe("cancelled")
+  })
+
+  it("is idempotent — does not overwrite an already-paid log", async () => {
+    await insertPendingLog()
+    const paidSession = makeSession({ paymentStatus: "paid" })
+    const calendar = makeMockCalendar()
+
+    await fulfillSession(sql, calendar, paidSession)
+
+    // Second call with unpaid should not flip the status back
+    const unpaidSession = makeSession({ paymentStatus: "unpaid" })
+    await fulfillSession(sql, calendar, unpaidSession)
+
+    const rows = await sql`SELECT status FROM booking_logs WHERE stripe_session_id = ${FAKE_SESSION_ID}`
+    expect(rows[0].status).toBe("paid")
+  })
+
+  it("confirms the hold event when session is paid", async () => {
+    await insertPendingLog()
+    const session = makeSession({
+      paymentStatus: "paid",
+      metadata: { calendarId: FAKE_CALENDAR_ID, holdEventId: FAKE_EVENT_ID },
+    })
+    const calendar = makeMockCalendar()
+
+    await fulfillSession(sql, calendar, session)
+
+    expect(calendar.calls.confirmHoldEvent).toBe(1)
+    expect(calendar.calls.deleteHoldEvent).toBe(0)
+  })
+
+  it("deletes the hold event when session is unpaid", async () => {
+    await insertPendingLog()
+    const session = makeSession({
+      paymentStatus: "unpaid",
+      metadata: { calendarId: FAKE_CALENDAR_ID, holdEventId: FAKE_EVENT_ID },
+    })
+    const calendar = makeMockCalendar()
+
+    await fulfillSession(sql, calendar, session)
+
+    expect(calendar.calls.deleteHoldEvent).toBe(1)
+    expect(calendar.deletedEvents).toEqual([FAKE_EVENT_ID])
+  })
+
+  it("does not touch the calendar when no holdEventId in metadata", async () => {
+    await insertPendingLog()
+    const session = makeSession({ paymentStatus: "paid", metadata: {} })
+    const calendar = makeMockCalendar()
+
+    await fulfillSession(sql, calendar, session)
+
+    expect(calendar.calls.confirmHoldEvent).toBe(0)
+    expect(calendar.calls.deleteHoldEvent).toBe(0)
+  })
+
+  it("handles missing booking log gracefully (no row to update)", async () => {
+    const session = makeSession({ paymentStatus: "paid" })
+    const calendar = makeMockCalendar()
+
+    // Should not throw even with no matching log row
+    await expect(fulfillSession(sql, calendar, session)).resolves.toBeUndefined()
+  })
+})
+
+// -- Tests: handleWebhookEvent -----------------------------------------------
+
+describe("handleWebhookEvent", () => {
+  async function insertPendingLog() {
+    await sql`
+      INSERT INTO booking_logs
+        (room_name, full_name, adults_count, children_count, check_in, check_out,
+         night_count, total_price, email, phone, stripe_session_id)
+      VALUES
+        ('Jules Verne', 'Jean Dupont', 2, 0, '1 janv. 2026', '4 janv. 2026',
+         3, 225, 'test@example.com', '+33 6 00 00 00 00', ${FAKE_SESSION_ID})
+    `
+  }
+
+  it("returns 400 when the webhook signature is invalid", async () => {
+    const stripe = makeMockStripe()
+    const calendar = makeMockCalendar()
+
+    const response = await handleWebhookEvent(
+      stripe, sql, calendar,
+      Buffer.from("payload"), "wrong-signature", "wrong-secret",
+    )
+
+    expect(response.status).toBe(400)
+    expect(response.body.error).toBe("Invalid webhook signature")
+  })
+
+  it("returns 200 and fulfils the booking on checkout.session.completed", async () => {
+    await insertPendingLog()
+    const stripe = makeMockStripe({ paymentStatus: "paid" })
+    const calendar = makeMockCalendar()
+
+    const response = await handleWebhookEvent(
+      stripe, sql, calendar,
+      Buffer.from("payload"), "valid-signature", FAKE_WEBHOOK_SECRET,
+    )
+
+    expect(response.status).toBe(200)
+    expect(response.body.received).toBe(true)
+
+    const rows = await sql`SELECT status FROM booking_logs WHERE stripe_session_id = ${FAKE_SESSION_ID}`
+    expect(rows[0].status).toBe("paid")
+  })
+
+  it("returns 200 and cleans up on checkout.session.expired", async () => {
+    await insertPendingLog()
+
+    // Override constructEvent to emit an expired event with an unpaid session
+    const expiredStripe = {
+      checkout: { sessions: { retrieve: async () => ({}) } },
+      webhooks: {
+        constructEvent: (_payload: unknown, _sig: unknown, secret: string) => {
+          if (secret !== FAKE_WEBHOOK_SECRET) throw new Error("Invalid signature")
+          return {
+            type: "checkout.session.expired",
+            data: {
+              object: makeSession({
+                paymentStatus: "unpaid",
+                metadata: { calendarId: FAKE_CALENDAR_ID, holdEventId: FAKE_EVENT_ID },
+              }),
+            },
+          } as unknown as Stripe.Event
+        },
+      },
+    } as unknown as Stripe
+
+    const calendar = makeMockCalendar()
+
+    const response = await handleWebhookEvent(
+      expiredStripe, sql, calendar,
+      Buffer.from("payload"), "valid-signature", FAKE_WEBHOOK_SECRET,
+    )
+
+    expect(response.status).toBe(200)
+
+    const rows = await sql`SELECT status FROM booking_logs WHERE stripe_session_id = ${FAKE_SESSION_ID}`
+    expect(rows[0].status).toBe("cancelled")
+    expect(calendar.calls.deleteHoldEvent).toBe(1)
+  })
+
+  it("returns 200 without fulfilling anything for unhandled event types", async () => {
+    await insertPendingLog()
+
+    const unhandledStripe = {
+      webhooks: {
+        constructEvent: (_payload: unknown, _sig: unknown, secret: string) => {
+          if (secret !== FAKE_WEBHOOK_SECRET) throw new Error("Invalid signature")
+          return { type: "payment_intent.created", data: { object: {} } } as unknown as Stripe.Event
+        },
+      },
+    } as unknown as Stripe
+
+    const calendar = makeMockCalendar()
+
+    const response = await handleWebhookEvent(
+      unhandledStripe, sql, calendar,
+      Buffer.from("payload"), "valid-signature", FAKE_WEBHOOK_SECRET,
+    )
+
+    expect(response.status).toBe(200)
+
+    // Log must still be pending — we did nothing
+    const rows = await sql`SELECT status FROM booking_logs WHERE stripe_session_id = ${FAKE_SESSION_ID}`
+    expect(rows[0].status).toBe("pending")
+  })
+
+  it("is idempotent — replayed completed event does not flip booking log back", async () => {
+    await insertPendingLog()
+    const stripe = makeMockStripe({
+      paymentStatus: "paid",
+      metadata: { calendarId: FAKE_CALENDAR_ID, holdEventId: FAKE_EVENT_ID },
+    })
+    const calendar = makeMockCalendar()
+
+    await handleWebhookEvent(stripe, sql, calendar, Buffer.from("p"), "sig", FAKE_WEBHOOK_SECRET)
+    await handleWebhookEvent(stripe, sql, calendar, Buffer.from("p"), "sig", FAKE_WEBHOOK_SECRET)
+
+    // DB log is still 'paid' after two calls
+    const rows = await sql`SELECT status FROM booking_logs WHERE stripe_session_id = ${FAKE_SESSION_ID}`
+    expect(rows[0].status).toBe("paid")
+
+    // Calendar ops are idempotent by design (confirmHoldEvent does a patch, deleteHoldEvent ignores 404s),
+    // so being called twice is harmless — no need to assert the count here
   })
 })
