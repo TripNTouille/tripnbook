@@ -185,7 +185,7 @@ const validInput = {
   email: "test@example.com",
   phone: "+33 6 00 00 00 00",
   specialNeeds: "",
-  returnUrl: "/book/2",
+  returnUrl: "/rooms/2",
   origin: "http://localhost:3000",
 }
 
@@ -359,10 +359,10 @@ describe("createCheckoutSession", () => {
     await createCheckoutSession(stripe, sql, calendar, validInput)
 
     expect(capturedParams!.success_url).toBe(
-      "http://localhost:3000/book/2?checkout=success&session_id={CHECKOUT_SESSION_ID}"
+      "http://localhost:3000/rooms/2?checkout=success&session_id={CHECKOUT_SESSION_ID}"
     )
     expect(capturedParams!.cancel_url).toBe(
-      "http://localhost:3000/book/2?checkout=cancelled&session_id={CHECKOUT_SESSION_ID}"
+      "http://localhost:3000/rooms/2?checkout=cancelled&session_id={CHECKOUT_SESSION_ID}"
     )
   })
 })

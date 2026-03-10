@@ -14,7 +14,7 @@ export default function RoomMenuBar({ rooms }: { rooms: Room[] }) {
       <ul className="hidden md:flex items-center justify-center gap-8 py-3 px-6">
         {rooms.map((room) => (
           <li key={room.id} className="hover:underline cursor-pointer">
-            <Link href={`/book/${room.id}`}>{room.name}</Link>
+            <Link href={`/rooms/${room.id}`}>{room.name}</Link>
           </li>
         ))}
       </ul>
@@ -33,7 +33,7 @@ export default function RoomMenuBar({ rooms }: { rooms: Room[] }) {
             {rooms.map((room) => (
               <li key={room.id}>
                 <Link
-                  href={`/book/${room.id}`}
+                  href={`/rooms/${room.id}`}
                   className="block py-2 hover:underline"
                   onClick={() => setOpen(false)}
                 >
