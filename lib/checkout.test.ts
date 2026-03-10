@@ -912,6 +912,78 @@ describe("fulfillSession", () => {
 
     expect(email.confirmationsSent).toBe(1)
   })
+
+  it("does not throw when confirmHoldEvent fails", async () => {
+    await insertPendingLog()
+    const session = makeSession({
+      paymentStatus: "paid",
+      metadata: { calendarId: FAKE_CALENDAR_ID, holdEventId: FAKE_EVENT_ID },
+    })
+    const calendar: CalendarDeps = {
+      ...makeMockCalendar(),
+      confirmHoldEvent: async () => { throw new Error("Google Calendar is down") },
+    }
+    const email = makeEmailDeps()
+
+    await expect(fulfillSession(sql, calendar, email, session)).resolves.toBeUndefined()
+  })
+
+  it("does not throw when deleteHoldEvent fails", async () => {
+    await insertPendingLog()
+    const session = makeSession({
+      paymentStatus: "unpaid",
+      metadata: { calendarId: FAKE_CALENDAR_ID, holdEventId: FAKE_EVENT_ID },
+    })
+    const calendar: CalendarDeps = {
+      ...makeMockCalendar(),
+      deleteHoldEvent: async () => { throw new Error("Google Calendar is down") },
+    }
+    const email = makeEmailDeps()
+
+    await expect(fulfillSession(sql, calendar, email, session)).resolves.toBeUndefined()
+  })
+
+  it("does not throw when sendConfirmation fails", async () => {
+    await insertPendingLog()
+    const session = makeSession({ paymentStatus: "paid" })
+    const calendar = makeMockCalendar()
+    const email: EmailDeps = {
+      sendConfirmation: async () => { throw new Error("Resend is down") },
+    }
+
+    await expect(fulfillSession(sql, calendar, email, session)).resolves.toBeUndefined()
+  })
+
+  it("still sends the email even when confirmHoldEvent fails", async () => {
+    await insertPendingLog()
+    const session = makeSession({
+      paymentStatus: "paid",
+      metadata: { calendarId: FAKE_CALENDAR_ID, holdEventId: FAKE_EVENT_ID },
+    })
+    const calendar: CalendarDeps = {
+      ...makeMockCalendar(),
+      confirmHoldEvent: async () => { throw new Error("Google Calendar is down") },
+    }
+    const email = makeEmailDeps()
+
+    await fulfillSession(sql, calendar, email, session)
+
+    expect(email.confirmationsSent).toBe(1)
+  })
+
+  it("still updates the booking log when sendConfirmation fails", async () => {
+    await insertPendingLog()
+    const session = makeSession({ paymentStatus: "paid" })
+    const calendar = makeMockCalendar()
+    const email: EmailDeps = {
+      sendConfirmation: async () => { throw new Error("Resend is down") },
+    }
+
+    await fulfillSession(sql, calendar, email, session)
+
+    const rows = await sql`SELECT status FROM booking_logs WHERE stripe_session_id = ${FAKE_SESSION_ID}`
+    expect(rows[0].status).toBe("paid")
+  })
 })
 
 // -- Tests: handleWebhookEvent -----------------------------------------------

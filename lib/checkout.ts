@@ -253,14 +253,20 @@ export async function fulfillSession(
   const calendarId = session.metadata?.calendarId
   const holdEventId = session.metadata?.holdEventId
 
+  // Calendar and email errors are caught independently so that:
+  // - a calendar failure doesn't prevent the confirmation email from being sent
+  // - an email failure doesn't cause a 500 that would trigger Stripe retries
+  // Both are logged for manual follow-up; the booking log is already updated above.
   if (calendarId && holdEventId) {
     if (isPaid) {
       const paymentIntent = typeof session.payment_intent === "string"
         ? session.payment_intent
         : session.payment_intent?.id ?? session.id
       await calendar.confirmHoldEvent(calendarId, holdEventId, paymentIntent)
+        .catch((err) => console.error("[checkout] Failed to confirm hold event", err))
     } else {
       await calendar.deleteHoldEvent(calendarId, holdEventId)
+        .catch((err) => console.error("[checkout] Failed to delete hold event", err))
     }
   }
 
@@ -279,7 +285,7 @@ export async function fulfillSession(
       to: meta.to ?? "",
       nightCount: Number(meta.nightCount ?? 0),
       totalPrice: Math.round((session.amount_total ?? 0) / 100),
-    })
+    }).catch((err) => console.error("[checkout] Failed to send confirmation email", err))
   }
 }
 
