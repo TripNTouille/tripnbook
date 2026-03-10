@@ -158,14 +158,23 @@ export async function createCheckoutSession(
     throw err
   }
 
-  await sql`
-    INSERT INTO booking_logs
-      (room_name, full_name, adults_count, children_count, check_in, check_out,
-       night_count, total_price, email, phone, special_needs, stripe_session_id)
-    VALUES
-      (${roomName}, ${fullName}, ${adultsCount}, ${childrenCount}, ${from}, ${to},
-       ${nightCount}, ${totalPrice}, ${email}, ${phone}, ${specialNeeds || null}, ${session.id})
-  `
+  try {
+    await sql`
+      INSERT INTO booking_logs
+        (room_name, full_name, adults_count, children_count, check_in, check_out,
+         night_count, total_price, email, phone, special_needs, stripe_session_id)
+      VALUES
+        (${roomName}, ${fullName}, ${adultsCount}, ${childrenCount}, ${from}, ${to},
+         ${nightCount}, ${totalPrice}, ${email}, ${phone}, ${specialNeeds || null}, ${session.id})
+    `
+  } catch (err) {
+    // The Stripe session exists but we can't log it — clean up the hold event
+    // so the dates don't remain blocked, then re-throw so the caller gets a 500.
+    if (calendarId && holdEventId) {
+      await calendar.deleteHoldEvent(calendarId, holdEventId)
+    }
+    throw err
+  }
 
   return { url: session.url }
 }
