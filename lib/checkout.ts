@@ -84,6 +84,7 @@ export async function createCheckoutSession(
   const checkOut = parseISO(toDate)
   const fromLabel = format(checkIn, "d MMM yyyy", { locale: fr })
   const toLabel = format(checkOut, "d MMM yyyy", { locale: fr })
+  // Recompute from authoritative server-side values — never trust client-supplied figures
   const nightCount = differenceInDays(checkOut, checkIn)
   const { totalPrice } = calculatePrice({ nightCount, adultsCount, childrenCount })
 
