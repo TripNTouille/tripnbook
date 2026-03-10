@@ -212,6 +212,7 @@ beforeAll(async () => {
       stripe_session_id TEXT,
       session_id TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'pending',
+      confirmation_sent_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
@@ -980,6 +981,21 @@ describe("fulfillSession", () => {
     await fulfillSession(sql, calendar, email, session)
     // Second call — row is no longer 'pending', so no email should be sent again
     await fulfillSession(sql, calendar, email, session)
+
+    expect(email.confirmationsSent).toBe(1)
+  })
+
+  it("sends exactly one email when redirect and webhook race", async () => {
+    await insertPendingLog()
+    const session = makeSession({ paymentStatus: "paid" })
+    const calendar = makeMockCalendar()
+    const email = makeEmailDeps()
+
+    // Simulate redirect and webhook calling fulfillSession concurrently
+    await Promise.all([
+      fulfillSession(sql, calendar, email, session),
+      fulfillSession(sql, calendar, email, session),
+    ])
 
     expect(email.confirmationsSent).toBe(1)
   })
