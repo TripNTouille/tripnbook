@@ -516,7 +516,7 @@ describe("createCheckoutSession — calendar integration", () => {
     const stripe = makeMockStripe()
     const calendar = makeMockCalendar({ datesFree: true })
 
-    const brokenSql: SqlExecutor = async (strings, ...values) => {
+    const brokenSql: SqlExecutor = async (strings) => {
       // Let SELECT-like queries through; fail only on INSERT
       const query = strings.join("?")
       if (query.toLowerCase().includes("insert")) {
