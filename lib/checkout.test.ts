@@ -598,6 +598,27 @@ describe("createCheckoutSession — calendar integration", () => {
     expect(calendar.calls.deleteHoldEvent).toBe(1)
     expect(calendar.deletedEvents).toEqual([FAKE_EVENT_ID])
   })
+
+  it("cleans up hold event if booking_logs INSERT fails", async () => {
+    const stripe = makeMockStripe()
+    const calendar = makeMockCalendar({ datesFree: true })
+
+    const brokenSql: SqlExecutor = async (strings) => {
+      // Let SELECT-like queries through; fail only on INSERT
+      const query = strings.join("?")
+      if (query.toLowerCase().includes("insert")) {
+        throw new Error("DB is down")
+      }
+      return []
+    }
+
+    try {
+      await createCheckoutSession(stripe, brokenSql, calendar, validInput)
+    } catch { /* expected */ }
+
+    expect(calendar.calls.deleteHoldEvent).toBe(1)
+    expect(calendar.deletedEvents).toEqual([FAKE_EVENT_ID])
+  })
 })
 
 // -- Tests: retrieveCheckoutSession ------------------------------------------
