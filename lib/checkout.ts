@@ -233,12 +233,22 @@ export async function fulfillSession(
   const isPaid = session.payment_status === "paid"
   const newStatus = isPaid ? "paid" : "cancelled"
 
-  const updatedRows = await sql`
-    UPDATE booking_logs
-    SET status = ${newStatus}
-    WHERE stripe_session_id = ${session.id} AND status = 'pending'
-    RETURNING *
-  `
+  // Set confirmation_sent_at atomically in the same UPDATE when paying.
+  // This ensures only the first concurrent caller (redirect or webhook) sends
+  // the email — the other gets updatedRows.length === 0 and skips it.
+  const updatedRows = isPaid
+    ? await sql`
+        UPDATE booking_logs
+        SET status = ${newStatus}, confirmation_sent_at = NOW()
+        WHERE stripe_session_id = ${session.id} AND status = 'pending'
+        RETURNING *
+      `
+    : await sql`
+        UPDATE booking_logs
+        SET status = ${newStatus}
+        WHERE stripe_session_id = ${session.id} AND status = 'pending'
+        RETURNING *
+      `
 
   const calendarId = session.metadata?.calendarId
   const holdEventId = session.metadata?.holdEventId
