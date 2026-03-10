@@ -1,4 +1,5 @@
-import { parseISO } from "date-fns"
+import { parseISO, differenceInDays } from "date-fns"
+import { calculatePrice } from "./pricing"
 import type Stripe from "stripe"
 import type { HoldEventInfo } from "./google-calendar"
 import type { BookingConfirmationData } from "./email"
@@ -44,8 +45,6 @@ export type CheckoutInput = {
   to: string
   fromDate: string // ISO date for calendar operations
   toDate: string   // ISO date for calendar operations
-  nightCount: number
-  totalPrice: number
   fullName: string
   email: string
   phone: string
@@ -80,8 +79,6 @@ export async function createCheckoutSession(
     to,
     fromDate,
     toDate,
-    nightCount,
-    totalPrice,
     fullName,
     email,
     phone,
@@ -95,6 +92,10 @@ export async function createCheckoutSession(
   // not in UTC (e.g. a Paris browser sending dates to a UTC Vercel server).
   const checkIn = parseISO(fromDate)
   const checkOut = parseISO(toDate)
+
+  // Recompute from authoritative server-side values — never trust client-supplied figures
+  const nightCount = differenceInDays(checkOut, checkIn)
+  const { totalPrice } = calculatePrice({ nightCount, adultsCount, childrenCount })
 
   // Block the dates on Google Calendar before creating the Stripe session
   const calendarId = await calendar.getCalendarId(roomId)
