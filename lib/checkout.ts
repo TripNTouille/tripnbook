@@ -281,18 +281,21 @@ export async function fulfillSession(
 
   // Only send the email when this call actually transitioned the row from
   // 'pending' to 'paid' — guards against sending duplicates on replayed events.
+  // Read all email data from the RETURNING row (server-side, trusted values)
+  // rather than session.metadata (client-supplied, not re-validated).
+  // amount_total is the exception: it comes from Stripe directly and is authoritative.
   const wasJustPaid = isPaid && updatedRows.length > 0
   if (wasJustPaid) {
-    const meta = session.metadata ?? {}
+    const log = updatedRows[0]
     await email.sendConfirmation({
-      guestEmail: session.customer_email ?? "",
-      guestName: meta.fullName ?? "",
-      roomName: meta.roomName ?? "",
-      adultsCount: Number(meta.adultsCount ?? 0),
-      childrenCount: Number(meta.childrenCount ?? 0),
-      from: meta.from ?? "",
-      to: meta.to ?? "",
-      nightCount: Number(meta.nightCount ?? 0),
+      guestEmail: String(log.email ?? ""),
+      guestName: String(log.full_name ?? ""),
+      roomName: String(log.room_name ?? ""),
+      adultsCount: Number(log.adults_count ?? 0),
+      childrenCount: Number(log.children_count ?? 0),
+      from: String(log.check_in ?? ""),
+      to: String(log.check_out ?? ""),
+      nightCount: Number(log.night_count ?? 0),
       totalPrice: Math.round((session.amount_total ?? 0) / 100),
     }).catch((err) => console.error("[checkout] Failed to send confirmation email", err))
   }
