@@ -1,0 +1,19 @@
+name: Delete Neon branch
+
+on:
+  pull_request:
+    branches: [main]
+    types: [closed]
+
+jobs:
+  delete-neon-branch:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Delete Neon branch
+        uses: neondatabase/delete-branch-action@v3
+        with:
+          project_id: ${{ vars.NEON_PROJECT_ID }}
+          branch: preview/${{ github.head_ref }}
+          api_key: ${{ secrets.NEON_API_KEY }}
