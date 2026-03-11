@@ -1,4 +1,5 @@
 import * as React from "react"
+import { siteConfig } from "@/config/site"
 import { CheckCircle, XCircle } from "lucide-react"
 
 import {
@@ -130,12 +131,12 @@ export default function CheckoutResultDialog() {
 
         <p className="text-sm text-muted-foreground">
           Questions ? Contactez-nous à{" "}
-          <a href="mailto:contact@tripntouille.com" className="underline font-medium">
-            contact@tripntouille.com
+          <a href={`mailto:${siteConfig.contactEmail}`} className="underline font-medium">
+            {siteConfig.contactEmail}
           </a>{" "}
           ou au{" "}
-          <a href="tel:+33630438587" className="underline font-medium">
-            +33 6 30 43 85 87
+          <a href={`tel:${siteConfig.contactPhone.href}`} className="underline font-medium">
+            {siteConfig.contactPhone.display}
           </a>.
         </p>
 

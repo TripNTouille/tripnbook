@@ -1,6 +1,7 @@
 import { Resend } from "resend"
+import { siteConfig } from "@/config/site"
 
-const OWNER_EMAIL = "contact@tripntouille.com"
+const OWNER_EMAIL = siteConfig.contactEmail
 
 export type BookingConfirmationData = {
   guestEmail: string

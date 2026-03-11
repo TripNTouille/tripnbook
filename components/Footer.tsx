@@ -1,6 +1,7 @@
 import { MailIcon, PhoneIcon, MapPinIcon } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
+import { siteConfig } from "@/config/site"
 
 export default function Footer() {
   return (
@@ -17,18 +18,18 @@ export default function Footer() {
         <div className="flex flex-col gap-2">
           <h3 className="font-semibold text-lg mb-1">Contact</h3>
           <Link
-            href="mailto:contact@tripntouille.com"
+            href={`mailto:${siteConfig.contactEmail}`}
             className="flex items-center gap-2 text-sm hover:underline"
           >
             <MailIcon className="size-4" />
-            contact@tripntouille.com
+            {siteConfig.contactEmail}
           </Link>
           <Link
-            href="tel:+33630438587"
+            href={`tel:${siteConfig.contactPhone.href}`}
             className="flex items-center gap-2 text-sm hover:underline"
           >
             <PhoneIcon className="size-4" />
-            +33 6 30 43 85 87
+            {siteConfig.contactPhone.display}
           </Link>
         </div>
 
@@ -37,10 +38,9 @@ export default function Footer() {
           <div className="flex items-start gap-2 text-sm">
             <MapPinIcon className="size-4 mt-0.5 shrink-0" />
             <address className="not-italic leading-relaxed">
-              859 route de Plainchassagne<br />
-              lieu-dit Plainchassagne<br />
-              Vendenesse-les-Charolles, 71120<br />
-              France
+              {siteConfig.address.map((line, i) => (
+                <span key={i}>{line}<br /></span>
+              ))}
             </address>
           </div>
         </div>
@@ -48,7 +48,7 @@ export default function Footer() {
         <div className="flex flex-col gap-2">
           <h3 className="font-semibold text-lg mb-1">Suivez-nous</h3>
           <Link
-            href="https://www.facebook.com/tripntouille"
+            href={siteConfig.social.facebook}
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm hover:underline"
@@ -56,7 +56,7 @@ export default function Footer() {
             Facebook
           </Link>
           <Link
-            href="https://www.instagram.com/tripntouille"
+            href={siteConfig.social.instagram}
             target="_blank"
             rel="noopener noreferrer"
             className="text-sm hover:underline"
