@@ -48,16 +48,21 @@ async function seed() {
     ALTER TABLE rooms ADD COLUMN IF NOT EXISTS google_calendar_id TEXT
   `;
 
+  // Add website_url column if it doesn't exist yet
+  await sql`
+    ALTER TABLE rooms ADD COLUMN IF NOT EXISTS website_url TEXT
+  `;
+
   const testCalendarId = '6b0cc1d7509e5eaf0ba2593034c4c369c74c612a83452a74265815fa2d979dbd@group.calendar.google.com';
 
   await sql`
-    INSERT INTO rooms (name, slug, google_calendar_id)
+    INSERT INTO rooms (name, slug, google_calendar_id, website_url)
     VALUES
-      ('Tante Aimée', 'tante-aimee', ${testCalendarId}),
-      ('Jules Verne', 'jules-verne', ${testCalendarId}),
-      ('Henriette', 'henriette', ${testCalendarId}),
-      ('Yukiko', 'yukiko', ${testCalendarId})
-    ON CONFLICT (name) DO UPDATE SET slug = EXCLUDED.slug, google_calendar_id = EXCLUDED.google_calendar_id
+      ('Tante Aimée', 'tante-aimee', ${testCalendarId}, 'https://tripntouille.com/2021/11/15/chambre-tante-aimee/'),
+      ('Jules Verne', 'jules-verne', ${testCalendarId}, 'https://tripntouille.com/2021/11/15/chambre-jules-verne/'),
+      ('Henriette',   'henriette',  ${testCalendarId}, 'https://tripntouille.com/2022/05/31/chambre-henriette/'),
+      ('Yukiko',      'yukiko',     ${testCalendarId}, 'https://tripntouille.com/2022/05/31/chambre-yukiko/')
+    ON CONFLICT (name) DO UPDATE SET slug = EXCLUDED.slug, google_calendar_id = EXCLUDED.google_calendar_id, website_url = EXCLUDED.website_url
   `;
 
   await sql`

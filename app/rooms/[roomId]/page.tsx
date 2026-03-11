@@ -2,6 +2,7 @@ import { getRoom, getRoomCapacity, getRooms } from '@/lib/rooms'
 import { getBusyDates } from '@/lib/google-calendar'
 import { notFound } from 'next/navigation'
 import { addMonths } from 'date-fns'
+import { ExternalLinkIcon } from "lucide-react"
 import BookingForm from '@/components/BookingForm'
 import RoomMenuBar from '@/components/RoomMenuBar'
 import Image from 'next/image'
@@ -55,6 +56,20 @@ export default async function BookRoomPage({
           )}
         </div>
       </div>
+
+      {room.website_url && (
+        <div className="flex justify-center mt-4">
+          <a
+            href={room.website_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:underline"
+          >
+            <ExternalLinkIcon className="size-3.5" />
+            En savoir plus sur cette chambre
+          </a>
+        </div>
+      )}
     </div>
   )
 }
