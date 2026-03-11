@@ -5,6 +5,7 @@ export type Room = {
   name: string;
   slug: string;
   google_calendar_id: string | null;
+  website_url: string | null;
 };
 
 export type RoomCapacity = {
@@ -17,18 +18,19 @@ export type RoomCapacity = {
 
 export async function getRooms(): Promise<Room[]> {
   const sql = getDb();
-  const rows = await sql`SELECT id, name, slug, google_calendar_id FROM rooms ORDER BY id`;
+  const rows = await sql`SELECT id, name, slug, google_calendar_id, website_url FROM rooms ORDER BY id`;
   return rows.map((r) => ({
     id: r.id as number,
     name: r.name as string,
     slug: r.slug as string,
     google_calendar_id: r.google_calendar_id as string | null,
+    website_url: r.website_url as string | null,
   }));
 }
 
 export async function getRoom(roomId: number): Promise<Room | null> {
   const sql = getDb();
-  const rows = await sql`SELECT id, name, slug, google_calendar_id FROM rooms WHERE id = ${roomId} LIMIT 1`;
+  const rows = await sql`SELECT id, name, slug, google_calendar_id, website_url FROM rooms WHERE id = ${roomId} LIMIT 1`;
   const r = rows[0];
   if (!r) return null;
   return {
@@ -36,6 +38,7 @@ export async function getRoom(roomId: number): Promise<Room | null> {
     name: r.name as string,
     slug: r.slug as string,
     google_calendar_id: r.google_calendar_id as string | null,
+    website_url: r.website_url as string | null,
   };
 }
 
