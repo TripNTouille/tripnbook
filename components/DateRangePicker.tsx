@@ -1,5 +1,5 @@
 import * as React from "react"
-import { startOfMonth, startOfDay, differenceInDays, addMonths, format } from "date-fns"
+import { startOfMonth, startOfDay, differenceInDays, addMonths, addDays, format } from "date-fns"
 import { fr } from "date-fns/locale"
 import { XIcon } from "lucide-react"
 import type { DateRange } from "react-day-picker"
@@ -77,6 +77,27 @@ export default function DateRangePicker({ roomId, busyDates = [], onBook }: Date
     [allBusyDates],
   )
 
+  // When a date or range is selected, compute which dates to disable.
+  // - firstBusyAfter: the next busy night after the selection — allowed as checkout, everything after it blocked
+  // - lastBusyBefore: the last busy night before the selection — blocked (and everything before it)
+  const selectionBoundaries = React.useMemo(() => {
+    const anchor = dateRange?.from
+    if (!anchor) return null
+
+    const afterSorted = busyDateObjects
+      .filter((d) => d > anchor)
+      .sort((a, b) => a.getTime() - b.getTime())
+    const firstBusyAfter = afterSorted[0] ?? null
+
+    const beforeSorted = busyDateObjects
+      .filter((d) => d < anchor)
+      .sort((a, b) => b.getTime() - a.getTime())
+    // addDays(+1) so that { before: X } (exclusive) also blocks the busy night itself
+    const lastBusyBefore = beforeSorted[0] ? addDays(beforeSorted[0], 1) : null
+
+    return { firstBusyAfter, lastBusyBefore }
+  }, [dateRange?.from, busyDateObjects])
+
   function handleMonthChange(month: Date) {
     if (!client) return
     const visibleMonths = client.isDesktop ? 3 : 1
@@ -129,9 +150,22 @@ export default function DateRangePicker({ roomId, busyDates = [], onBook }: Date
         onMonthChange={handleMonthChange}
         defaultMonth={today}
         startMonth={startOfMonth(today)}
-        modifiers={{ busy: busyDateObjects }}
+        modifiers={{
+          // Remove strikethrough from firstBusyAfter so it looks selectable as checkout
+          busy: selectionBoundaries?.firstBusyAfter
+            ? busyDateObjects.filter((d) => d.getTime() !== selectionBoundaries.firstBusyAfter!.getTime())
+            : busyDateObjects,
+        }}
         modifiersClassNames={{ busy: "line-through" }}
-        disabled={[{ before: today }, ...busyDateObjects]}
+        disabled={[
+          { before: today },
+          ...(selectionBoundaries
+            ? [
+                ...(selectionBoundaries.firstBusyAfter ? [{ after: selectionBoundaries.firstBusyAfter }] : []),
+                ...(selectionBoundaries.lastBusyBefore ? [{ before: selectionBoundaries.lastBusyBefore }] : []),
+              ]
+            : busyDateObjects),
+        ]}
       />
 
       {hasCompleteRange && (
