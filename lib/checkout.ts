@@ -2,6 +2,7 @@ import { parseISO } from "date-fns"
 import type Stripe from "stripe"
 import type { HoldEventInfo } from "./google-calendar"
 import type { BookingConfirmationData } from "./email"
+import { insertBookingLog, updateBookingLogStatus } from "./booking-logs"
 
 // Stripe event types handled by the webhook
 const HANDLED_EVENTS = ["checkout.session.completed", "checkout.session.expired"] as const
@@ -165,14 +166,23 @@ export async function createCheckoutSession(
     throw err
   }
 
-  await sql`
-    INSERT INTO booking_logs
-      (room_name, full_name, adults_count, children_count, check_in, check_out,
-       night_count, total_price, email, phone, special_needs, stripe_session_id, expires_at, session_id)
-    VALUES
-      (${roomName}, ${fullName}, ${adultsCount}, ${childrenCount}, ${from}, ${to},
-       ${nightCount}, ${totalPrice}, ${email}, ${phone}, ${specialNeeds || null}, ${session.id}, ${expiresAt}, ${sessionId})
-  `
+  await insertBookingLog(
+  sql,
+  roomName,
+  fullName,
+  adultsCount,
+  childrenCount,
+  from,
+  to,
+  nightCount,
+  totalPrice,
+  email,
+  phone,
+  specialNeeds || null,
+  session.id,
+  expiresAt,
+  sessionId,
+)
 
   return { url: session.url }
 }
@@ -240,12 +250,7 @@ export async function fulfillSession(
   const isPaid = session.payment_status === "paid"
   const newStatus = isPaid ? "paid" : "cancelled"
 
-  const updatedRows = await sql`
-    UPDATE booking_logs
-    SET status = ${newStatus}
-    WHERE stripe_session_id = ${session.id} AND status = 'pending'
-    RETURNING *
-  `
+  const updatedRows = await updateBookingLogStatus(sql, session.id, newStatus as "paid" | "cancelled")
 
   const calendarId = session.metadata?.calendarId
   const holdEventId = session.metadata?.holdEventId
