@@ -7,8 +7,9 @@ export async function GET(request: NextRequest) {
   const roomId = params.get("roomId")
   const from = params.get("from")
   const to = params.get("to")
+  const sessionId = params.get("sessionId")
 
-  if (!roomId || !from || !to) {
+  if (!roomId || !from || !to || !sessionId) {
     return NextResponse.json(
       { error: "Missing roomId, from, or to parameter" },
       { status: 400 },
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest) {
     room.google_calendar_id,
     new Date(from),
     new Date(to),
+    sessionId,
   )
 
   return NextResponse.json({

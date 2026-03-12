@@ -39,8 +39,12 @@ export async function getBusyDates(
   calendarId: string,
   from: Date,
   to: Date,
+  sessionId?: string,
 ): Promise<Date[]> {
   const calendar = getCalendarClient()
+
+  // for later use
+  if (!sessionId) throw new Error("sessionId undefined")
 
   // Split into monthly chunks to stay under Google's time range limit
   const chunks: { start: Date; end: Date }[] = []
