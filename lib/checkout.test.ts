@@ -211,7 +211,8 @@ beforeAll(async () => {
       special_needs TEXT,
       stripe_session_id TEXT,
       status TEXT NOT NULL DEFAULT 'pending',
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `)
 })

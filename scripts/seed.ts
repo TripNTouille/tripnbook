@@ -104,13 +104,19 @@ async function seed() {
       special_needs TEXT,
       stripe_session_id TEXT,
       status TEXT NOT NULL DEFAULT 'pending',
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `;
 
   // Add full_name column if it doesn't exist yet (for existing databases)
   await sql`
     ALTER TABLE booking_logs ADD COLUMN IF NOT EXISTS full_name TEXT
+  `;
+
+  // Add expires_at column if it doesn't exist yet
+  await sql`
+    ALTER TABLE booking_logs ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
   `;
 
   console.log("✅ Seeded rooms, room_capacities, and booking_logs tables");

@@ -116,11 +116,16 @@ export async function createCheckoutSession(
   const totalGuests = adultsCount + childrenCount
   const guestLabel = `${totalGuests} pers. (${adultsCount} ad.${childrenCount > 0 ? `, ${childrenCount} enf.` : ""})`
 
+  // Expiry: 30 minutes from now (used for both Stripe session and booking log)
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000)
+  const expiresAtTimestamp = Math.floor(expiresAt.getTime() / 1000)
+
   let session: Stripe.Checkout.Session
   try {
     session = await stripe.checkout.sessions.create({
       mode: "payment",
       customer_email: email,
+      expires_at: expiresAtTimestamp,
       line_items: [
         {
           price_data: {
@@ -161,10 +166,10 @@ export async function createCheckoutSession(
   await sql`
     INSERT INTO booking_logs
       (room_name, full_name, adults_count, children_count, check_in, check_out,
-       night_count, total_price, email, phone, special_needs, stripe_session_id)
+       night_count, total_price, email, phone, special_needs, stripe_session_id, expires_at)
     VALUES
       (${roomName}, ${fullName}, ${adultsCount}, ${childrenCount}, ${from}, ${to},
-       ${nightCount}, ${totalPrice}, ${email}, ${phone}, ${specialNeeds || null}, ${session.id})
+       ${nightCount}, ${totalPrice}, ${email}, ${phone}, ${specialNeeds || null}, ${session.id}, ${expiresAt})
   `
 
   return { url: session.url }
