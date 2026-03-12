@@ -52,6 +52,7 @@ export type CheckoutInput = {
   specialNeeds: string
   returnUrl: string
   origin: string
+  sessionId: string
 }
 
 export type CheckoutResult = {
@@ -88,6 +89,7 @@ export async function createCheckoutSession(
     specialNeeds,
     returnUrl,
     origin,
+    sessionId,
   } = input
 
   // parseISO("2025-04-17") → local midnight, safe across timezones.
@@ -166,10 +168,10 @@ export async function createCheckoutSession(
   await sql`
     INSERT INTO booking_logs
       (room_name, full_name, adults_count, children_count, check_in, check_out,
-       night_count, total_price, email, phone, special_needs, stripe_session_id, expires_at)
+       night_count, total_price, email, phone, special_needs, stripe_session_id, expires_at, session_id)
     VALUES
       (${roomName}, ${fullName}, ${adultsCount}, ${childrenCount}, ${from}, ${to},
-       ${nightCount}, ${totalPrice}, ${email}, ${phone}, ${specialNeeds || null}, ${session.id}, ${expiresAt})
+       ${nightCount}, ${totalPrice}, ${email}, ${phone}, ${specialNeeds || null}, ${session.id}, ${expiresAt}, ${sessionId})
   `
 
   return { url: session.url }

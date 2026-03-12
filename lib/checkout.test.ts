@@ -187,6 +187,7 @@ const validInput = {
   specialNeeds: "",
   returnUrl: "/rooms/2",
   origin: "http://localhost:3000",
+  sessionId: "550e8400-e29b-41d4-a716-446655440000",
 }
 
 // -- Setup / teardown --------------------------------------------------------
@@ -210,6 +211,7 @@ beforeAll(async () => {
       phone TEXT NOT NULL,
       special_needs TEXT,
       stripe_session_id TEXT,
+      session_id TEXT NOT NULL DEFAULT '',
       status TEXT NOT NULL DEFAULT 'pending',
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
