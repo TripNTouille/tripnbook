@@ -164,6 +164,7 @@ export async function createCheckoutSession(
 
   await insertBookingLog(
   sql,
+  roomId,
   roomName,
   fullName,
   adultsCount,

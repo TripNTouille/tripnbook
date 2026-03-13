@@ -42,9 +42,9 @@ function insertLog(overrides: {
 
   return db.query(
     `INSERT INTO booking_logs
-      (room_name, adults_count, children_count, check_in, check_out,
+      (room_id, room_name, adults_count, children_count, check_in, check_out,
        night_count, total_price, email, phone, session_id, status, expires_at)
-     VALUES ($1, 2, 0, $2, $3, 3, 225, 'test@example.com', '+33 6 00 00 00 00', $4, $5, $6)`,
+     VALUES (1, $1, 2, 0, $2, $3, 3, 225, 'test@example.com', '+33 6 00 00 00 00', $4, $5, $6)`,
     [roomName, checkIn, checkOut, sessionId, status, expiresAt.toISOString()],
   )
 }
@@ -58,6 +58,7 @@ beforeAll(async () => {
   await db.query(`
     CREATE TABLE booking_logs (
       id SERIAL PRIMARY KEY,
+      room_id INTEGER NOT NULL,
       room_name TEXT NOT NULL,
       full_name TEXT,
       adults_count INTEGER NOT NULL,

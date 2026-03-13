@@ -3,6 +3,7 @@ import { parseISO, startOfDay, addDays } from "date-fns"
 
 export type BookingLog = {
   id: number
+  room_id: number
   room_name: string
   full_name: string | null
   adults_count: number
@@ -23,6 +24,7 @@ export type BookingLog = {
 
 export async function insertBookingLog(
   sql: SqlExecutor,
+  roomId: number,
   roomName: string,
   fullName: string | null,
   adultsCount: number,
@@ -40,10 +42,10 @@ export async function insertBookingLog(
 ): Promise<void> {
   await sql`
     INSERT INTO booking_logs
-      (room_name, full_name, adults_count, children_count, check_in, check_out,
+      (room_id, room_name, full_name, adults_count, children_count, check_in, check_out,
        night_count, total_price, email, phone, special_needs, stripe_session_id, expires_at, session_id)
     VALUES
-      (${roomName}, ${fullName}, ${adultsCount}, ${childrenCount}, ${checkIn}, ${checkOut},
+      (${roomId}, ${roomName}, ${fullName}, ${adultsCount}, ${childrenCount}, ${checkIn}, ${checkOut},
        ${nightCount}, ${totalPrice}, ${email}, ${phone}, ${specialNeeds || null}, ${stripeSessionId}, ${expiresAt}, ${sessionId})
   `
 }

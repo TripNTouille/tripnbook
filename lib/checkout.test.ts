@@ -191,6 +191,7 @@ beforeAll(async () => {
   await db.query(`
     CREATE TABLE booking_logs (
       id SERIAL PRIMARY KEY,
+      room_id INTEGER NOT NULL,
       room_name TEXT NOT NULL,
       full_name TEXT,
       adults_count INTEGER NOT NULL,
@@ -481,10 +482,10 @@ describe("retrieveCheckoutSession", () => {
   async function insertPendingLog(sessionId: string = FAKE_SESSION_ID) {
     await db.query(
       `INSERT INTO booking_logs
-        (room_name, adults_count, children_count, check_in, check_out,
+        (room_id, room_name, adults_count, children_count, check_in, check_out,
          night_count, total_price, email, phone, stripe_session_id, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending')`,
-      ["Jules Verne", 2, 0, "1 janv. 2026", "4 janv. 2026", 3, 225, "test@example.com", "+33 6 00 00 00 00", sessionId]
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'pending')`,
+      [validInput.roomId, "Jules Verne", 2, 0, "1 janv. 2026", "4 janv. 2026", 3, 225, "test@example.com", "+33 6 00 00 00 00", sessionId]
     )
   }
 
@@ -615,10 +616,10 @@ describe("handleGetSession", () => {
   async function insertPendingLog(sessionId: string = FAKE_SESSION_ID) {
     await db.query(
       `INSERT INTO booking_logs
-        (room_name, adults_count, children_count, check_in, check_out,
+        (room_id, room_name, adults_count, children_count, check_in, check_out,
          night_count, total_price, email, phone, stripe_session_id, status)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending')`,
-      ["Jules Verne", 2, 0, "1 janv. 2026", "4 janv. 2026", 3, 225, "test@example.com", "+33 6 00 00 00 00", sessionId]
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'pending')`,
+      [validInput.roomId, "Jules Verne", 2, 0, "1 janv. 2026", "4 janv. 2026", 3, 225, "test@example.com", "+33 6 00 00 00 00", sessionId]
     )
   }
 
@@ -726,10 +727,10 @@ describe("fulfillSession", () => {
   async function insertPendingLog() {
     await sql`
       INSERT INTO booking_logs
-        (room_name, full_name, adults_count, children_count, check_in, check_out,
+        (room_id, room_name, full_name, adults_count, children_count, check_in, check_out,
          night_count, total_price, email, phone, stripe_session_id)
       VALUES
-        ('Jules Verne', 'Jean Dupont', 2, 0, '1 janv. 2026', '4 janv. 2026',
+        (${validInput.roomId}, 'Jules Verne', 'Jean Dupont', 2, 0, '1 janv. 2026', '4 janv. 2026',
          3, 225, 'test@example.com', '+33 6 00 00 00 00', ${FAKE_SESSION_ID})
     `
   }
@@ -867,10 +868,10 @@ describe("handleWebhookEvent", () => {
   async function insertPendingLog() {
     await sql`
       INSERT INTO booking_logs
-        (room_name, full_name, adults_count, children_count, check_in, check_out,
+        (room_id, room_name, full_name, adults_count, children_count, check_in, check_out,
          night_count, total_price, email, phone, stripe_session_id)
       VALUES
-        ('Jules Verne', 'Jean Dupont', 2, 0, '1 janv. 2026', '4 janv. 2026',
+        (${validInput.roomId}, 'Jules Verne', 'Jean Dupont', 2, 0, '1 janv. 2026', '4 janv. 2026',
          3, 225, 'test@example.com', '+33 6 00 00 00 00', ${FAKE_SESSION_ID})
     `
   }
