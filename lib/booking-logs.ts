@@ -52,13 +52,13 @@ export async function insertBookingLog(
 
 export async function getHoldDates(
   sql: SqlExecutor,
-  roomName: string,
+  roomId: number,
   sessionId: string,
 ): Promise<Set<string>> {
   const rows = await sql`
     SELECT check_in, check_out
     FROM booking_logs
-    WHERE room_name = ${roomName}
+    WHERE room_id = ${roomId}
       AND session_id = ${sessionId}
       AND status = 'pending'
       AND expires_at > NOW()

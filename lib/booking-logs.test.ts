@@ -21,19 +21,20 @@ function pgliteToSqlExecutor(pglite: PGlite): SqlExecutor {
 
 let sql: SqlExecutor
 
-const ROOM_NAME = "Jules Verne"
+const ROOM_ID = 1
+const OTHER_ROOM_ID = 2
 const SESSION_ID = "550e8400-e29b-41d4-a716-446655440000"
 const OTHER_SESSION_ID = "660e8400-e29b-41d4-a716-446655440000"
 
 function insertLog(overrides: {
-  roomName?: string
+  roomId?: number
   sessionId?: string
   checkIn?: string
   checkOut?: string
   status?: string
   expiresAt?: Date
 }) {
-  const roomName = overrides.roomName ?? ROOM_NAME
+  const roomId = overrides.roomId ?? ROOM_ID
   const sessionId = overrides.sessionId ?? SESSION_ID
   const checkIn = overrides.checkIn ?? "2026-01-10"
   const checkOut = overrides.checkOut ?? "2026-01-13"
@@ -44,8 +45,8 @@ function insertLog(overrides: {
     `INSERT INTO booking_logs
       (room_id, room_name, adults_count, children_count, check_in, check_out,
        night_count, total_price, email, phone, session_id, status, expires_at)
-     VALUES (1, $1, 2, 0, $2, $3, 3, 225, 'test@example.com', '+33 6 00 00 00 00', $4, $5, $6)`,
-    [roomName, checkIn, checkOut, sessionId, status, expiresAt.toISOString()],
+     VALUES ($1, 'Jules Verne', 2, 0, $2, $3, 3, 225, 'test@example.com', '+33 6 00 00 00 00', $4, $5, $6)`,
+    [roomId, checkIn, checkOut, sessionId, status, expiresAt.toISOString()],
   )
 }
 
@@ -93,7 +94,7 @@ describe("getHoldDates", () => {
   it("returns the nights covered by a pending hold", async () => {
     await insertLog({ checkIn: "2026-01-10", checkOut: "2026-01-13" })
 
-    const dates = await getHoldDates(sql, ROOM_NAME, SESSION_ID)
+    const dates = await getHoldDates(sql, ROOM_ID, SESSION_ID)
 
     expect(dates.has(startOfDay(parseISO("2026-01-10")).toISOString())).toBe(true)
     expect(dates.has(startOfDay(parseISO("2026-01-11")).toISOString())).toBe(true)
@@ -103,7 +104,7 @@ describe("getHoldDates", () => {
   })
 
   it("returns empty set when no hold exists for the session", async () => {
-    const dates = await getHoldDates(sql, ROOM_NAME, SESSION_ID)
+    const dates = await getHoldDates(sql, ROOM_ID, SESSION_ID)
 
     expect(dates.size).toBe(0)
   })
@@ -111,15 +112,15 @@ describe("getHoldDates", () => {
   it("ignores holds from other sessions", async () => {
     await insertLog({ sessionId: OTHER_SESSION_ID })
 
-    const dates = await getHoldDates(sql, ROOM_NAME, SESSION_ID)
+    const dates = await getHoldDates(sql, ROOM_ID, SESSION_ID)
 
     expect(dates.size).toBe(0)
   })
 
   it("ignores holds for other rooms", async () => {
-    await insertLog({ roomName: "Tante Aimée" })
+    await insertLog({ roomId: OTHER_ROOM_ID })
 
-    const dates = await getHoldDates(sql, ROOM_NAME, SESSION_ID)
+    const dates = await getHoldDates(sql, ROOM_ID, SESSION_ID)
 
     expect(dates.size).toBe(0)
   })
@@ -127,7 +128,7 @@ describe("getHoldDates", () => {
   it("ignores expired holds", async () => {
     await insertLog({ expiresAt: new Date(Date.now() - 1000) })
 
-    const dates = await getHoldDates(sql, ROOM_NAME, SESSION_ID)
+    const dates = await getHoldDates(sql, ROOM_ID, SESSION_ID)
 
     expect(dates.size).toBe(0)
   })
@@ -135,7 +136,7 @@ describe("getHoldDates", () => {
   it("ignores paid holds", async () => {
     await insertLog({ status: "paid" })
 
-    const dates = await getHoldDates(sql, ROOM_NAME, SESSION_ID)
+    const dates = await getHoldDates(sql, ROOM_ID, SESSION_ID)
 
     expect(dates.size).toBe(0)
   })
@@ -143,7 +144,7 @@ describe("getHoldDates", () => {
   it("ignores cancelled holds", async () => {
     await insertLog({ status: "cancelled" })
 
-    const dates = await getHoldDates(sql, ROOM_NAME, SESSION_ID)
+    const dates = await getHoldDates(sql, ROOM_ID, SESSION_ID)
 
     expect(dates.size).toBe(0)
   })
