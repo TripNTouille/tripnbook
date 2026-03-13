@@ -1,6 +1,6 @@
 import { parseISO } from "date-fns"
 import type Stripe from "stripe"
-import type { HoldEventInfo } from "./google-calendar"
+import type { HoldEventInfo } from "./calendar"
 import type { BookingConfirmationData } from "./email"
 import { insertBookingLog, updateBookingLogStatus } from "./booking-logs"
 

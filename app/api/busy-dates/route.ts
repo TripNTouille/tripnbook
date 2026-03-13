@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getRoom } from "@/lib/rooms"
-import { getBusyDates } from "@/lib/google-calendar"
+import { getBusyDates } from "@/lib/calendar"
 
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams
