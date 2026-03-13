@@ -1,4 +1,5 @@
-import { parseISO } from "date-fns"
+import { parseISO, differenceInDays } from "date-fns"
+import { calculatePrice } from "./pricing"
 import type Stripe from "stripe"
 import type { HoldEventInfo } from "./google-calendar"
 import type { BookingConfirmationData } from "./email"
@@ -44,8 +45,6 @@ export type CheckoutInput = {
   to: string
   fromDate: string // ISO date for calendar operations
   toDate: string   // ISO date for calendar operations
-  nightCount: number
-  totalPrice: number
   fullName: string
   email: string
   phone: string
@@ -80,8 +79,6 @@ export async function createCheckoutSession(
     to,
     fromDate,
     toDate,
-    nightCount,
-    totalPrice,
     fullName,
     email,
     phone,
@@ -95,6 +92,10 @@ export async function createCheckoutSession(
   // not in UTC (e.g. a Paris browser sending dates to a UTC Vercel server).
   const checkIn = parseISO(fromDate)
   const checkOut = parseISO(toDate)
+
+  // Recompute from authoritative server-side values — never trust client-supplied figures
+  const nightCount = differenceInDays(checkOut, checkIn)
+  const { totalPrice } = calculatePrice({ nightCount, adultsCount, childrenCount })
 
   // Block the dates on Google Calendar before creating the Stripe session
   const calendarId = await calendar.getCalendarId(roomId)
@@ -158,14 +159,23 @@ export async function createCheckoutSession(
     throw err
   }
 
-  await sql`
-    INSERT INTO booking_logs
-      (room_name, full_name, adults_count, children_count, check_in, check_out,
-       night_count, total_price, email, phone, special_needs, stripe_session_id)
-    VALUES
-      (${roomName}, ${fullName}, ${adultsCount}, ${childrenCount}, ${from}, ${to},
-       ${nightCount}, ${totalPrice}, ${email}, ${phone}, ${specialNeeds || null}, ${session.id})
-  `
+  try {
+    await sql`
+      INSERT INTO booking_logs
+        (room_name, full_name, adults_count, children_count, check_in, check_out,
+         night_count, total_price, email, phone, special_needs, stripe_session_id)
+      VALUES
+        (${roomName}, ${fullName}, ${adultsCount}, ${childrenCount}, ${from}, ${to},
+         ${nightCount}, ${totalPrice}, ${email}, ${phone}, ${specialNeeds || null}, ${session.id})
+    `
+  } catch (err) {
+    // The Stripe session exists but we can't log it — clean up the hold event
+    // so the dates don't remain blocked, then re-throw so the caller gets a 500.
+    if (calendarId && holdEventId) {
+      await calendar.deleteHoldEvent(calendarId, holdEventId)
+    }
+    throw err
+  }
 
   return { url: session.url }
 }
@@ -233,43 +243,62 @@ export async function fulfillSession(
   const isPaid = session.payment_status === "paid"
   const newStatus = isPaid ? "paid" : "cancelled"
 
-  const updatedRows = await sql`
-    UPDATE booking_logs
-    SET status = ${newStatus}
-    WHERE stripe_session_id = ${session.id} AND status = 'pending'
-    RETURNING *
-  `
+  // Set confirmation_sent_at atomically in the same UPDATE when paying.
+  // This ensures only the first concurrent caller (redirect or webhook) sends
+  // the email — the other gets updatedRows.length === 0 and skips it.
+  const updatedRows = isPaid
+    ? await sql`
+        UPDATE booking_logs
+        SET status = ${newStatus}, confirmation_sent_at = NOW()
+        WHERE stripe_session_id = ${session.id} AND status = 'pending'
+        RETURNING *
+      `
+    : await sql`
+        UPDATE booking_logs
+        SET status = ${newStatus}
+        WHERE stripe_session_id = ${session.id} AND status = 'pending'
+        RETURNING *
+      `
 
   const calendarId = session.metadata?.calendarId
   const holdEventId = session.metadata?.holdEventId
 
+  // Calendar and email errors are caught independently so that:
+  // - a calendar failure doesn't prevent the confirmation email from being sent
+  // - an email failure doesn't cause a 500 that would trigger Stripe retries
+  // Both are logged for manual follow-up; the booking log is already updated above.
   if (calendarId && holdEventId) {
     if (isPaid) {
       const paymentIntent = typeof session.payment_intent === "string"
         ? session.payment_intent
         : session.payment_intent?.id ?? session.id
       await calendar.confirmHoldEvent(calendarId, holdEventId, paymentIntent)
+        .catch((err) => console.error("[checkout] Failed to confirm hold event", err))
     } else {
       await calendar.deleteHoldEvent(calendarId, holdEventId)
+        .catch((err) => console.error("[checkout] Failed to delete hold event", err))
     }
   }
 
   // Only send the email when this call actually transitioned the row from
   // 'pending' to 'paid' — guards against sending duplicates on replayed events.
+  // Read all email data from the RETURNING row (server-side, trusted values)
+  // rather than session.metadata (client-supplied, not re-validated).
+  // amount_total is the exception: it comes from Stripe directly and is authoritative.
   const wasJustPaid = isPaid && updatedRows.length > 0
   if (wasJustPaid) {
-    const meta = session.metadata ?? {}
+    const log = updatedRows[0]
     await email.sendConfirmation({
-      guestEmail: session.customer_email ?? "",
-      guestName: meta.fullName ?? "",
-      roomName: meta.roomName ?? "",
-      adultsCount: Number(meta.adultsCount ?? 0),
-      childrenCount: Number(meta.childrenCount ?? 0),
-      from: meta.from ?? "",
-      to: meta.to ?? "",
-      nightCount: Number(meta.nightCount ?? 0),
+      guestEmail: String(log.email ?? ""),
+      guestName: String(log.full_name ?? ""),
+      roomName: String(log.room_name ?? ""),
+      adultsCount: Number(log.adults_count ?? 0),
+      childrenCount: Number(log.children_count ?? 0),
+      from: String(log.check_in ?? ""),
+      to: String(log.check_out ?? ""),
+      nightCount: Number(log.night_count ?? 0),
       totalPrice: Math.round((session.amount_total ?? 0) / 100),
-    })
+    }).catch((err) => console.error("[checkout] Failed to send confirmation email", err))
   }
 }
 
