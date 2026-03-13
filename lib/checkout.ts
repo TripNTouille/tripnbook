@@ -25,7 +25,7 @@ export type SqlExecutor = (
  * Calendar operations needed by checkout, injected for testability.
  */
 export type CalendarDeps = {
-  areDatesFree: (roomId: number, checkIn: Date, checkOut: Date, sessionId: string) => Promise<boolean>
+  checkDatesAvailability: (roomId: number, checkIn: Date, checkOut: Date, sessionId: string) => Promise<{ hasBusyDates: boolean; stripeSessionIdToExpire: string | null }>
   createHoldEvent: (roomId: number, checkIn: Date, checkOut: Date, guest: HoldEventInfo) => Promise<string>
   confirmHoldEvent: (roomId: number, eventId: string, paymentIntentId: string) => Promise<void>
   deleteHoldEvent: (roomId: number, eventId: string) => Promise<void>
@@ -101,9 +101,15 @@ export async function createCheckoutSession(
   // Block the dates on Google Calendar before creating the Stripe session
   let holdEventId: string | null = null
 
-  const free = await calendar.areDatesFree(roomId, checkIn, checkOut, sessionId)
-  if (!free) {
+  const { hasBusyDates, stripeSessionIdToExpire } = await calendar.checkDatesAvailability(roomId, checkIn, checkOut, sessionId)
+  if (hasBusyDates) {
     throw new DatesUnavailableError()
+  }
+
+  if (stripeSessionIdToExpire) {
+    // Expire the previous hold session before creating a new one.
+    // If this fails, abort — we don't want two concurrent holds for the same user.
+    await stripe.checkout.sessions.expire(stripeSessionIdToExpire)
   }
   holdEventId = await calendar.createHoldEvent(roomId, checkIn, checkOut, {
     fullName,

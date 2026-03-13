@@ -3,7 +3,7 @@ import Stripe from "stripe"
 import { Resend } from "resend"
 import { getDb } from "@/lib/db"
 
-import { areDatesFree, createHoldEvent, confirmHoldEvent, deleteHoldEvent } from "@/lib/calendar"
+import { checkDatesAvailability, createHoldEvent, confirmHoldEvent, deleteHoldEvent } from "@/lib/calendar"
 import { sendBookingConfirmation } from "@/lib/email"
 import { handleWebhookEvent, type CalendarDeps, type EmailDeps } from "@/lib/checkout"
 
@@ -14,7 +14,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 const resend = new Resend(process.env.RESEND_API_KEY!)
 
 const calendar: CalendarDeps = {
-  areDatesFree,
+  checkDatesAvailability,
   createHoldEvent,
   confirmHoldEvent,
   deleteHoldEvent,

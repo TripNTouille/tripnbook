@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest"
 import { PGlite } from "@electric-sql/pglite"
 import { addMinutes, parseISO, startOfDay } from "date-fns"
-import { getHoldDates } from "./booking-logs"
+import { getHoldInfo } from "./booking-logs"
 import type { SqlExecutor } from "./checkout"
 
 // -- In-memory Postgres via PGlite ------------------------------------------
@@ -29,6 +29,7 @@ const OTHER_SESSION_ID = "660e8400-e29b-41d4-a716-446655440000"
 function insertLog(overrides: {
   roomId?: number
   sessionId?: string
+  stripeSessionId?: string | null
   checkIn?: string
   checkOut?: string
   status?: string
@@ -36,6 +37,7 @@ function insertLog(overrides: {
 }) {
   const roomId = overrides.roomId ?? ROOM_ID
   const sessionId = overrides.sessionId ?? SESSION_ID
+  const stripeSessionId = overrides.stripeSessionId ?? null
   const checkIn = overrides.checkIn ?? "2026-01-10"
   const checkOut = overrides.checkOut ?? "2026-01-13"
   const status = overrides.status ?? "pending"
@@ -44,9 +46,9 @@ function insertLog(overrides: {
   return db.query(
     `INSERT INTO booking_logs
       (room_id, room_name, adults_count, children_count, check_in, check_out,
-       night_count, total_price, email, phone, session_id, status, expires_at)
-     VALUES ($1, 'Jules Verne', 2, 0, $2, $3, 3, 225, 'test@example.com', '+33 6 00 00 00 00', $4, $5, $6)`,
-    [roomId, checkIn, checkOut, sessionId, status, expiresAt.toISOString()],
+       night_count, total_price, email, phone, stripe_session_id, session_id, status, expires_at)
+     VALUES ($1, 'Jules Verne', 2, 0, $2, $3, 3, 225, 'test@example.com', '+33 6 00 00 00 00', $4, $5, $6, $7)`,
+    [roomId, checkIn, checkOut, stripeSessionId, sessionId, status, expiresAt.toISOString()],
   )
 }
 
@@ -88,13 +90,15 @@ afterAll(async () => {
   await db.close()
 })
 
-// -- Tests: getHoldDates -----------------------------------------------------
+// -- Tests: getHoldInfo ------------------------------------------------------
 
-describe("getHoldDates", () => {
+const FAKE_STRIPE_SESSION_ID = "cs_test_abc123"
+
+describe("getHoldInfo", () => {
   it("returns the nights covered by a pending hold", async () => {
     await insertLog({ checkIn: "2026-01-10", checkOut: "2026-01-13" })
 
-    const dates = await getHoldDates(sql, ROOM_ID, SESSION_ID)
+    const { dates } = await getHoldInfo(sql, ROOM_ID, SESSION_ID)
 
     expect(dates.has(startOfDay(parseISO("2026-01-10")).toISOString())).toBe(true)
     expect(dates.has(startOfDay(parseISO("2026-01-11")).toISOString())).toBe(true)
@@ -103,16 +107,25 @@ describe("getHoldDates", () => {
     expect(dates.has(startOfDay(parseISO("2026-01-13")).toISOString())).toBe(false)
   })
 
-  it("returns empty set when no hold exists for the session", async () => {
-    const dates = await getHoldDates(sql, ROOM_ID, SESSION_ID)
+  it("returns the stripe session id of the hold", async () => {
+    await insertLog({ stripeSessionId: FAKE_STRIPE_SESSION_ID })
+
+    const { stripeSessionId } = await getHoldInfo(sql, ROOM_ID, SESSION_ID)
+
+    expect(stripeSessionId).toBe(FAKE_STRIPE_SESSION_ID)
+  })
+
+  it("returns empty dates and null stripeSessionId when no hold exists", async () => {
+    const { dates, stripeSessionId } = await getHoldInfo(sql, ROOM_ID, SESSION_ID)
 
     expect(dates.size).toBe(0)
+    expect(stripeSessionId).toBeNull()
   })
 
   it("ignores holds from other sessions", async () => {
     await insertLog({ sessionId: OTHER_SESSION_ID })
 
-    const dates = await getHoldDates(sql, ROOM_ID, SESSION_ID)
+    const { dates } = await getHoldInfo(sql, ROOM_ID, SESSION_ID)
 
     expect(dates.size).toBe(0)
   })
@@ -120,7 +133,7 @@ describe("getHoldDates", () => {
   it("ignores holds for other rooms", async () => {
     await insertLog({ roomId: OTHER_ROOM_ID })
 
-    const dates = await getHoldDates(sql, ROOM_ID, SESSION_ID)
+    const { dates } = await getHoldInfo(sql, ROOM_ID, SESSION_ID)
 
     expect(dates.size).toBe(0)
   })
@@ -128,7 +141,7 @@ describe("getHoldDates", () => {
   it("ignores expired holds", async () => {
     await insertLog({ expiresAt: new Date(Date.now() - 1000) })
 
-    const dates = await getHoldDates(sql, ROOM_ID, SESSION_ID)
+    const { dates } = await getHoldInfo(sql, ROOM_ID, SESSION_ID)
 
     expect(dates.size).toBe(0)
   })
@@ -136,7 +149,7 @@ describe("getHoldDates", () => {
   it("ignores paid holds", async () => {
     await insertLog({ status: "paid" })
 
-    const dates = await getHoldDates(sql, ROOM_ID, SESSION_ID)
+    const { dates } = await getHoldInfo(sql, ROOM_ID, SESSION_ID)
 
     expect(dates.size).toBe(0)
   })
@@ -144,7 +157,7 @@ describe("getHoldDates", () => {
   it("ignores cancelled holds", async () => {
     await insertLog({ status: "cancelled" })
 
-    const dates = await getHoldDates(sql, ROOM_ID, SESSION_ID)
+    const { dates } = await getHoldInfo(sql, ROOM_ID, SESSION_ID)
 
     expect(dates.size).toBe(0)
   })

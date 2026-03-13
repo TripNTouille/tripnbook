@@ -41,6 +41,7 @@ function makeMockStripe(overrides: {
   paymentStatus?: string
   sessionId?: string
   metadata?: Record<string, string>
+  expireShouldFail?: boolean
 } = {}): Stripe {
   const sessionId = overrides.sessionId ?? FAKE_SESSION_ID
   const paymentStatus = overrides.paymentStatus ?? "paid"
@@ -77,6 +78,9 @@ function makeMockStripe(overrides: {
           metadata: params.metadata,
         }),
         retrieve: async () => session,
+        expire: async () => {
+          if (overrides.expireShouldFail) throw new Error("Stripe expire failed")
+        },
       },
     },
     webhooks: {
@@ -113,10 +117,11 @@ const FAKE_WEBHOOK_SECRET = "whsec_test_secret"
 
 function makeMockCalendar(overrides: {
   datesFree?: boolean
+  stripeSessionIdToExpire?: string | null
   holdEventId?: string
 } = {}): CalendarDeps & {
   calls: {
-    areDatesFree: number
+    checkDatesAvailability: number
     createHoldEvent: number
     confirmHoldEvent: number
     deleteHoldEvent: number
@@ -124,17 +129,18 @@ function makeMockCalendar(overrides: {
   deletedEvents: string[]
 } {
   const datesFree = overrides.datesFree ?? true
+  const stripeSessionIdToExpire = overrides.stripeSessionIdToExpire ?? null
   const holdEventId = overrides.holdEventId ?? FAKE_EVENT_ID
 
-  const calls = { areDatesFree: 0, createHoldEvent: 0, confirmHoldEvent: 0, deleteHoldEvent: 0 }
+  const calls = { checkDatesAvailability: 0, createHoldEvent: 0, confirmHoldEvent: 0, deleteHoldEvent: 0 }
   const deletedEvents: string[] = []
 
   return {
     calls,
     deletedEvents,
-    areDatesFree: async () => {
-      calls.areDatesFree++
-      return datesFree
+    checkDatesAvailability: async () => {
+      calls.checkDatesAvailability++
+      return { hasBusyDates: !datesFree, stripeSessionIdToExpire }
     },
     createHoldEvent: async () => {
       calls.createHoldEvent++
@@ -372,7 +378,7 @@ describe("createCheckoutSession — calendar integration", () => {
 
     await createCheckoutSession(stripe, sql, calendar, validInput)
 
-    expect(calendar.calls.areDatesFree).toBe(1)
+    expect(calendar.calls.checkDatesAvailability).toBe(1)
   })
 
   it("creates a hold event when dates are free", async () => {
@@ -455,6 +461,43 @@ describe("createCheckoutSession — calendar integration", () => {
 
     const rows = (await db.query("SELECT * FROM booking_logs")).rows
     expect(rows).toHaveLength(0)
+  })
+
+  it("expires the previous Stripe session when user already has a hold", async () => {
+    let expiredSessionId: string | null = null
+    const stripe = {
+      checkout: {
+        sessions: {
+          create: async () => ({ id: FAKE_SESSION_ID, url: FAKE_CHECKOUT_URL }),
+          expire: async (id: string) => { expiredSessionId = id },
+        },
+      },
+    } as unknown as Stripe
+    const PREVIOUS_SESSION_ID = "cs_test_previous"
+    const calendar = makeMockCalendar({ stripeSessionIdToExpire: PREVIOUS_SESSION_ID })
+
+    await createCheckoutSession(stripe, sql, calendar, validInput)
+
+    expect(expiredSessionId).toBe(PREVIOUS_SESSION_ID)
+  })
+
+  it("does not create a new session if expiring the previous one fails", async () => {
+    let createCalled = false
+    const stripe = {
+      checkout: {
+        sessions: {
+          create: async () => { createCalled = true; return { id: FAKE_SESSION_ID, url: FAKE_CHECKOUT_URL } },
+          expire: async () => { throw new Error("Stripe expire failed") },
+        },
+      },
+    } as unknown as Stripe
+    const calendar = makeMockCalendar({ stripeSessionIdToExpire: "cs_test_previous" })
+
+    await expect(
+      createCheckoutSession(stripe, sql, calendar, validInput)
+    ).rejects.toThrow("Stripe expire failed")
+
+    expect(createCalled).toBe(false)
   })
 
   it("cleans up hold event if Stripe session creation fails", async () => {

@@ -50,13 +50,18 @@ export async function insertBookingLog(
   `
 }
 
-export async function getHoldDates(
+export type HoldInfo = {
+  dates: Set<string>
+  stripeSessionId: string | null
+}
+
+export async function getHoldInfo(
   sql: SqlExecutor,
   roomId: number,
   sessionId: string,
-): Promise<Set<string>> {
+): Promise<HoldInfo> {
   const rows = await sql`
-    SELECT check_in, check_out
+    SELECT check_in, check_out, stripe_session_id
     FROM booking_logs
     WHERE room_id = ${roomId}
       AND session_id = ${sessionId}
@@ -64,18 +69,21 @@ export async function getHoldDates(
       AND expires_at > NOW()
   `
 
-  const holdDates = new Set<string>()
+  const dates = new Set<string>()
+  let stripeSessionId: string | null = null
+
   for (const row of rows) {
     const checkIn = startOfDay(parseISO(row.check_in as string))
     const checkOut = startOfDay(parseISO(row.check_out as string))
     let day = checkIn
     while (day < checkOut) {
-      holdDates.add(day.toISOString())
+      dates.add(day.toISOString())
       day = addDays(day, 1)
     }
+    stripeSessionId = row.stripe_session_id as string | null
   }
 
-  return holdDates
+  return { dates, stripeSessionId }
 }
 
 export async function updateBookingLogStatus(

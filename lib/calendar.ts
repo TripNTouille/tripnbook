@@ -2,7 +2,7 @@ import { google, calendar_v3 } from "googleapis"
 import { addDays, addMonths, startOfDay, startOfMonth, format } from "date-fns"
 import { getRoom } from "./rooms"
 import { getDb } from "./db"
-import { getHoldDates } from "./booking-logs"
+import { getHoldInfo } from "./booking-logs"
 
 const SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
@@ -100,25 +100,42 @@ export async function getBusyDates(
   const slots = await fetchBusySlotsFromGoogle(room.google_calendar_id, from, to)
   const nights = slotsToNights(slots)
 
-  const holdNights = await getHoldDates(getDb(), roomId, sessionId)
+  const { dates: holdNights } = await getHoldInfo(getDb(), roomId, sessionId)
   return nights.filter((night) => !holdNights.has(night.toISOString()))
 }
 
+export type DatesAvailability = {
+  hasBusyDates: boolean
+  stripeSessionIdToExpire: string | null
+}
+
 /**
- * Checks whether all nights in a date range are free on the given room's calendar.
+ * Checks whether all nights in a date range are free on the given room's calendar,
+ * excluding the current user's own pending hold.
+ *
+ * Returns hasBusyDates so the caller knows whether to block the booking,
+ * and stripeSessionIdToExpire so the caller can cancel the user's existing hold
+ * before creating a new one.
  */
-export async function areDatesFree(
+export async function checkDatesAvailability(
   roomId: number,
   checkIn: Date,
   checkOut: Date,
   sessionId: string,
-): Promise<boolean> {
-  console.log("[areDatesFree] sessionId:", sessionId)
+): Promise<DatesAvailability> {
+  const holdInfo = await getHoldInfo(getDb(), roomId, sessionId)
+
   const room = await getRoom(roomId)
-  if (!room?.google_calendar_id) return true
+  if (!room?.google_calendar_id) return { hasBusyDates: false, stripeSessionIdToExpire: holdInfo.stripeSessionId }
 
   const slots = await fetchBusySlotsFromGoogle(room.google_calendar_id, checkIn, checkOut)
-  return slots.length === 0
+  const nights = slotsToNights(slots)
+
+  const confirmedNights = nights.filter((night) => !holdInfo.dates.has(night.toISOString()))
+  return {
+    hasBusyDates: confirmedNights.length > 0,
+    stripeSessionIdToExpire: holdInfo.stripeSessionId,
+  }
 }
 
 export type HoldEventInfo = {
