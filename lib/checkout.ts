@@ -25,7 +25,7 @@ export type SqlExecutor = (
  * Calendar operations needed by checkout, injected for testability.
  */
 export type CalendarDeps = {
-  areDatesFree: (roomId: number, checkIn: Date, checkOut: Date) => Promise<boolean>
+  areDatesFree: (roomId: number, checkIn: Date, checkOut: Date, sessionId: string) => Promise<boolean>
   createHoldEvent: (roomId: number, checkIn: Date, checkOut: Date, guest: HoldEventInfo) => Promise<string>
   confirmHoldEvent: (roomId: number, eventId: string, paymentIntentId: string) => Promise<void>
   deleteHoldEvent: (roomId: number, eventId: string) => Promise<void>
@@ -101,7 +101,7 @@ export async function createCheckoutSession(
   // Block the dates on Google Calendar before creating the Stripe session
   let holdEventId: string | null = null
 
-  const free = await calendar.areDatesFree(roomId, checkIn, checkOut)
+  const free = await calendar.areDatesFree(roomId, checkIn, checkOut, sessionId)
   if (!free) {
     throw new DatesUnavailableError()
   }

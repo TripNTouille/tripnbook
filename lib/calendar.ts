@@ -90,7 +90,9 @@ export async function getBusyDates(
   roomId: number,
   from: Date,
   to: Date,
+  sessionId: string,
 ): Promise<Date[]> {
+  console.log("[getBusyDates] sessionId:", sessionId)
   const room = await getRoom(roomId)
   if (!room?.google_calendar_id) return []
 
@@ -105,7 +107,9 @@ export async function areDatesFree(
   roomId: number,
   checkIn: Date,
   checkOut: Date,
+  sessionId: string,
 ): Promise<boolean> {
+  console.log("[areDatesFree] sessionId:", sessionId)
   const room = await getRoom(roomId)
   if (!room?.google_calendar_id) return true
 

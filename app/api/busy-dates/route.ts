@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     )
   }
 
-  const dates = await getBusyDates(Number(roomId), new Date(from), new Date(to))
+  const dates = await getBusyDates(Number(roomId), new Date(from), new Date(to), sessionId)
 
   return NextResponse.json({
     dates: dates.map((d) => d.toISOString()),
