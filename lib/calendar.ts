@@ -1,6 +1,8 @@
 import { google, calendar_v3 } from "googleapis"
 import { addDays, addMonths, startOfDay, startOfMonth, format } from "date-fns"
 import { getRoom } from "./rooms"
+import { getDb } from "./db"
+import { getHoldDates } from "./booking-logs"
 
 const SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
@@ -92,12 +94,14 @@ export async function getBusyDates(
   to: Date,
   sessionId: string,
 ): Promise<Date[]> {
-  console.log("[getBusyDates] sessionId:", sessionId)
   const room = await getRoom(roomId)
   if (!room?.google_calendar_id) return []
 
   const slots = await fetchBusySlotsFromGoogle(room.google_calendar_id, from, to)
-  return slotsToNights(slots)
+  const nights = slotsToNights(slots)
+
+  const holdNights = await getHoldDates(getDb(), roomId, sessionId)
+  return nights.filter((night) => !holdNights.has(night.toISOString()))
 }
 
 /**
