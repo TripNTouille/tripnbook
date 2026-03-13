@@ -109,16 +109,13 @@ function makeSession(overrides: {
 // -- Calendar mock -----------------------------------------------------------
 
 const FAKE_EVENT_ID = "gcal_event_123"
-const FAKE_CALENDAR_ID = "room-calendar@group.calendar.google.com"
 const FAKE_WEBHOOK_SECRET = "whsec_test_secret"
 
 function makeMockCalendar(overrides: {
-  calendarId?: string | null
   datesFree?: boolean
   holdEventId?: string
 } = {}): CalendarDeps & {
   calls: {
-    getCalendarId: number
     areDatesFree: number
     createHoldEvent: number
     confirmHoldEvent: number
@@ -126,20 +123,15 @@ function makeMockCalendar(overrides: {
   }
   deletedEvents: string[]
 } {
-  const calendarId = overrides.calendarId === undefined ? FAKE_CALENDAR_ID : overrides.calendarId
   const datesFree = overrides.datesFree ?? true
   const holdEventId = overrides.holdEventId ?? FAKE_EVENT_ID
 
-  const calls = { getCalendarId: 0, areDatesFree: 0, createHoldEvent: 0, confirmHoldEvent: 0, deleteHoldEvent: 0 }
+  const calls = { areDatesFree: 0, createHoldEvent: 0, confirmHoldEvent: 0, deleteHoldEvent: 0 }
   const deletedEvents: string[] = []
 
   return {
     calls,
     deletedEvents,
-    getCalendarId: async () => {
-      calls.getCalendarId++
-      return calendarId
-    },
     areDatesFree: async () => {
       calls.areDatesFree++
       return datesFree
@@ -379,7 +371,6 @@ describe("createCheckoutSession — calendar integration", () => {
 
     await createCheckoutSession(stripe, sql, calendar, validInput)
 
-    expect(calendar.calls.getCalendarId).toBe(1)
     expect(calendar.calls.areDatesFree).toBe(1)
   })
 
@@ -392,7 +383,7 @@ describe("createCheckoutSession — calendar integration", () => {
     expect(calendar.calls.createHoldEvent).toBe(1)
   })
 
-  it("stores calendarId and holdEventId in Stripe metadata", async () => {
+  it("stores roomId and holdEventId in Stripe metadata", async () => {
     let capturedParams: Stripe.Checkout.SessionCreateParams | null = null
     const stripe = {
       checkout: {
@@ -408,7 +399,7 @@ describe("createCheckoutSession — calendar integration", () => {
 
     await createCheckoutSession(stripe, sql, calendar, validInput)
 
-    expect(capturedParams!.metadata!.calendarId).toBe(FAKE_CALENDAR_ID)
+    expect(capturedParams!.metadata!.roomId).toBe(String(validInput.roomId))
     expect(capturedParams!.metadata!.holdEventId).toBe(FAKE_EVENT_ID)
   })
 
@@ -463,37 +454,6 @@ describe("createCheckoutSession — calendar integration", () => {
 
     const rows = (await db.query("SELECT * FROM booking_logs")).rows
     expect(rows).toHaveLength(0)
-  })
-
-  it("skips calendar operations when room has no calendar ID", async () => {
-    const stripe = makeMockStripe()
-    const calendar = makeMockCalendar({ calendarId: null })
-
-    const result = await createCheckoutSession(stripe, sql, calendar, validInput)
-
-    expect(result.url).toBe(FAKE_CHECKOUT_URL)
-    expect(calendar.calls.areDatesFree).toBe(0)
-    expect(calendar.calls.createHoldEvent).toBe(0)
-  })
-
-  it("does not include calendarId/holdEventId in metadata when room has no calendar", async () => {
-    let capturedParams: Stripe.Checkout.SessionCreateParams | null = null
-    const stripe = {
-      checkout: {
-        sessions: {
-          create: async (params: Stripe.Checkout.SessionCreateParams) => {
-            capturedParams = params
-            return { id: FAKE_SESSION_ID, url: FAKE_CHECKOUT_URL }
-          },
-        },
-      },
-    } as unknown as Stripe
-    const calendar = makeMockCalendar({ calendarId: null })
-
-    await createCheckoutSession(stripe, sql, calendar, validInput)
-
-    expect(capturedParams!.metadata!.calendarId).toBeUndefined()
-    expect(capturedParams!.metadata!.holdEventId).toBeUndefined()
   })
 
   it("cleans up hold event if Stripe session creation fails", async () => {
@@ -611,7 +571,7 @@ describe("retrieveCheckoutSession", () => {
     await insertPendingLog()
     const stripe = makeMockStripe({
       paymentStatus: "unpaid",
-      metadata: { calendarId: FAKE_CALENDAR_ID, holdEventId: FAKE_EVENT_ID },
+      metadata: { roomId: String(validInput.roomId), holdEventId: FAKE_EVENT_ID },
     })
     const calendar = makeMockCalendar()
     const email = makeEmailDeps()
@@ -626,7 +586,7 @@ describe("retrieveCheckoutSession", () => {
     await insertPendingLog()
     const stripe = makeMockStripe({
       paymentStatus: "paid",
-      metadata: { calendarId: FAKE_CALENDAR_ID, holdEventId: FAKE_EVENT_ID },
+      metadata: { roomId: String(validInput.roomId), holdEventId: FAKE_EVENT_ID },
     })
     const calendar = makeMockCalendar()
     const email = makeEmailDeps()
@@ -818,7 +778,7 @@ describe("fulfillSession", () => {
     await insertPendingLog()
     const session = makeSession({
       paymentStatus: "paid",
-      metadata: { calendarId: FAKE_CALENDAR_ID, holdEventId: FAKE_EVENT_ID },
+      metadata: { roomId: String(validInput.roomId), holdEventId: FAKE_EVENT_ID },
     })
     const calendar = makeMockCalendar()
     const email = makeEmailDeps()
@@ -833,7 +793,7 @@ describe("fulfillSession", () => {
     await insertPendingLog()
     const session = makeSession({
       paymentStatus: "unpaid",
-      metadata: { calendarId: FAKE_CALENDAR_ID, holdEventId: FAKE_EVENT_ID },
+      metadata: { roomId: String(validInput.roomId), holdEventId: FAKE_EVENT_ID },
     })
     const calendar = makeMockCalendar()
     const email = makeEmailDeps()
@@ -961,7 +921,7 @@ describe("handleWebhookEvent", () => {
             data: {
               object: makeSession({
                 paymentStatus: "unpaid",
-                metadata: { calendarId: FAKE_CALENDAR_ID, holdEventId: FAKE_EVENT_ID },
+                metadata: { roomId: String(validInput.roomId), holdEventId: FAKE_EVENT_ID },
               }),
             },
           } as unknown as Stripe.Event
@@ -1015,7 +975,7 @@ describe("handleWebhookEvent", () => {
     await insertPendingLog()
     const stripe = makeMockStripe({
       paymentStatus: "paid",
-      metadata: { calendarId: FAKE_CALENDAR_ID, holdEventId: FAKE_EVENT_ID },
+      metadata: { roomId: String(validInput.roomId), holdEventId: FAKE_EVENT_ID },
     })
     const calendar = makeMockCalendar()
     const email = makeEmailDeps()

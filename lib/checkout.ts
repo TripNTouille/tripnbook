@@ -25,11 +25,10 @@ export type SqlExecutor = (
  * Calendar operations needed by checkout, injected for testability.
  */
 export type CalendarDeps = {
-  getCalendarId: (roomId: number) => Promise<string | null>
-  areDatesFree: (calendarId: string, checkIn: Date, checkOut: Date) => Promise<boolean>
-  createHoldEvent: (calendarId: string, checkIn: Date, checkOut: Date, guest: HoldEventInfo) => Promise<string>
-  confirmHoldEvent: (calendarId: string, eventId: string, paymentIntentId: string) => Promise<void>
-  deleteHoldEvent: (calendarId: string, eventId: string) => Promise<void>
+  areDatesFree: (roomId: number, checkIn: Date, checkOut: Date) => Promise<boolean>
+  createHoldEvent: (roomId: number, checkIn: Date, checkOut: Date, guest: HoldEventInfo) => Promise<string>
+  confirmHoldEvent: (roomId: number, eventId: string, paymentIntentId: string) => Promise<void>
+  deleteHoldEvent: (roomId: number, eventId: string) => Promise<void>
 }
 
 export type EmailDeps = {
@@ -100,21 +99,18 @@ export async function createCheckoutSession(
   const checkOut = parseISO(toDate)
 
   // Block the dates on Google Calendar before creating the Stripe session
-  const calendarId = await calendar.getCalendarId(roomId)
   let holdEventId: string | null = null
 
-  if (calendarId) {
-    const free = await calendar.areDatesFree(calendarId, checkIn, checkOut)
-    if (!free) {
-      throw new DatesUnavailableError()
-    }
-    holdEventId = await calendar.createHoldEvent(calendarId, checkIn, checkOut, {
-      fullName,
-      email,
-      phone,
-      specialNeeds,
-    })
+  const free = await calendar.areDatesFree(roomId, checkIn, checkOut)
+  if (!free) {
+    throw new DatesUnavailableError()
   }
+  holdEventId = await calendar.createHoldEvent(roomId, checkIn, checkOut, {
+    fullName,
+    email,
+    phone,
+    specialNeeds,
+  })
 
   const totalGuests = adultsCount + childrenCount
   const guestLabel = `${totalGuests} pers. (${adultsCount} ad.${childrenCount > 0 ? `, ${childrenCount} enf.` : ""})`
@@ -143,6 +139,7 @@ export async function createCheckoutSession(
         },
       ],
       metadata: {
+        roomId: String(roomId),
         roomName,
         fullName,
         adultsCount: String(adultsCount),
@@ -152,7 +149,6 @@ export async function createCheckoutSession(
         nightCount: String(nightCount),
         phone,
         specialNeeds,
-        ...(calendarId && { calendarId }),
         ...(holdEventId && { holdEventId }),
       },
       success_url: `${origin}${returnUrl}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
@@ -160,8 +156,8 @@ export async function createCheckoutSession(
     })
   } catch (err) {
     // Clean up the hold event if Stripe session creation fails
-    if (calendarId && holdEventId) {
-      await calendar.deleteHoldEvent(calendarId, holdEventId)
+    if (holdEventId) {
+      await calendar.deleteHoldEvent(roomId, holdEventId)
     }
     throw err
   }
@@ -252,17 +248,17 @@ export async function fulfillSession(
 
   const updatedRows = await updateBookingLogStatus(sql, session.id, newStatus as "paid" | "cancelled")
 
-  const calendarId = session.metadata?.calendarId
+  const roomId = session.metadata?.roomId ? Number(session.metadata.roomId) : null
   const holdEventId = session.metadata?.holdEventId
 
-  if (calendarId && holdEventId) {
+  if (roomId && holdEventId) {
     if (isPaid) {
       const paymentIntent = typeof session.payment_intent === "string"
         ? session.payment_intent
         : session.payment_intent?.id ?? session.id
-      await calendar.confirmHoldEvent(calendarId, holdEventId, paymentIntent)
+      await calendar.confirmHoldEvent(roomId, holdEventId, paymentIntent)
     } else {
-      await calendar.deleteHoldEvent(calendarId, holdEventId)
+      await calendar.deleteHoldEvent(roomId, holdEventId)
     }
   }
 

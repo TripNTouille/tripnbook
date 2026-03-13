@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server"
 import Stripe from "stripe"
 import { Resend } from "resend"
 import { getDb } from "@/lib/db"
-import { getRoom } from "@/lib/rooms"
 import { areDatesFree, createHoldEvent, confirmHoldEvent, deleteHoldEvent } from "@/lib/calendar"
 import { sendBookingConfirmation } from "@/lib/email"
 import { handleGetSession, type CalendarDeps, type EmailDeps } from "@/lib/checkout"
@@ -14,10 +13,6 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 const resend = new Resend(process.env.RESEND_API_KEY!)
 
 const calendar: CalendarDeps = {
-  getCalendarId: async (roomId) => {
-    const room = await getRoom(roomId)
-    return room?.google_calendar_id ?? null
-  },
   areDatesFree,
   createHoldEvent,
   confirmHoldEvent,

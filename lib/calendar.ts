@@ -1,5 +1,6 @@
 import { google, calendar_v3 } from "googleapis"
 import { addDays, addMonths, startOfDay, startOfMonth, format } from "date-fns"
+import { getRoom } from "./rooms"
 
 const SCOPES = ["https://www.googleapis.com/auth/calendar"]
 
@@ -24,29 +25,16 @@ function getCalendarClient(): calendar_v3.Calendar {
 }
 
 /**
- * Returns an array of dates (midnight, local) that are booked nights for the given calendar.
- *
- * A booked night is represented in Google Calendar as an event from 4pm to 11am the next day.
- * A multi-night booking is a single event (e.g. Jan 10 4pm → Jan 13 11am = 3 nights).
- *
- * For each busy interval, every day from the start date up to (but not including) the end date
- * is a booked night. The end date (checkout day) remains available for new check-ins.
- *
- * The Google FreeBusy API limits queries to ~2 months, so we split the range
- * into monthly chunks automatically.
+ * Queries Google Calendar for busy slots in monthly chunks.
+ * The Google FreeBusy API limits queries to ~2 months, so we split the range automatically.
  */
-export async function getBusyDates(
+async function fetchBusySlotsFromGoogle(
   calendarId: string,
   from: Date,
   to: Date,
-  sessionId?: string,
-): Promise<Date[]> {
+): Promise<{ start: string; end: string }[]> {
   const calendar = getCalendarClient()
 
-  // for later use
-  if (!sessionId) throw new Error("sessionId undefined")
-
-  // Split into monthly chunks to stay under Google's time range limit
   const chunks: { start: Date; end: Date }[] = []
   let chunkStart = from
   while (chunkStart < to) {
@@ -67,38 +55,62 @@ export async function getBusyDates(
     ),
   )
 
-  const bookedNights: Date[] = []
-  for (const response of responses) {
-    const busySlots = response.data.calendars?.[calendarId]?.busy ?? []
-
-    for (const slot of busySlots) {
-      if (!slot.start || !slot.end) continue
-
-      const slotStart = startOfDay(new Date(slot.start))
-      const slotEnd = startOfDay(new Date(slot.end))
-
-      // Every day from start up to (not including) end is a booked night
-      let day = slotStart
-      while (day < slotEnd) {
-        bookedNights.push(day)
-        day = addDays(day, 1)
-      }
-    }
-  }
-
-  return bookedNights
+  return responses.flatMap(
+    (r) => r.data.calendars?.[calendarId]?.busy ?? []
+  ) as { start: string; end: string }[]
 }
 
 /**
- * Checks whether all nights in a date range are free on the given calendar.
+ * Converts busy slots (time ranges) into individual booked night dates.
+ *
+ * A booked night is represented in Google Calendar as an event from 4pm to 11am the next day.
+ * A multi-night booking is a single event (e.g. Jan 10 4pm → Jan 13 11am = 3 nights).
+ *
+ * For each busy interval, every day from the start date up to (but not including) the end date
+ * is a booked night. The end date (checkout day) remains available for new check-ins.
+ */
+function slotsToNights(slots: { start: string; end: string }[]): Date[] {
+  const nights: Date[] = []
+  for (const slot of slots) {
+    if (!slot.start || !slot.end) continue
+    let day = startOfDay(new Date(slot.start))
+    const end = startOfDay(new Date(slot.end))
+    while (day < end) {
+      nights.push(day)
+      day = addDays(day, 1)
+    }
+  }
+  return nights
+}
+
+/**
+ * Returns booked nights for the given room, excluding the current user's pending hold.
+ */
+export async function getBusyDates(
+  roomId: number,
+  from: Date,
+  to: Date,
+): Promise<Date[]> {
+  const room = await getRoom(roomId)
+  if (!room?.google_calendar_id) return []
+
+  const slots = await fetchBusySlotsFromGoogle(room.google_calendar_id, from, to)
+  return slotsToNights(slots)
+}
+
+/**
+ * Checks whether all nights in a date range are free on the given room's calendar.
  */
 export async function areDatesFree(
-  calendarId: string,
+  roomId: number,
   checkIn: Date,
   checkOut: Date,
 ): Promise<boolean> {
-  const busyDates = await getBusyDates(calendarId, checkIn, checkOut)
-  return busyDates.length === 0
+  const room = await getRoom(roomId)
+  if (!room?.google_calendar_id) return true
+
+  const slots = await fetchBusySlotsFromGoogle(room.google_calendar_id, checkIn, checkOut)
+  return slots.length === 0
 }
 
 export type HoldEventInfo = {
@@ -111,20 +123,22 @@ export type HoldEventInfo = {
 const STRIPE_DASHBOARD_URL = "https://dashboard.stripe.com/payments"
 
 /**
- * Creates a temporary "hold" event on the calendar while the guest completes payment.
+ * Creates a temporary "hold" event on the room's calendar while the guest completes payment.
  * Returns the created event ID so it can be cleaned up if payment is cancelled.
  *
  * The event spans from check-in day 16:00 to check-out day 11:00,
  * matching the convention used for actual bookings.
  */
 export async function createHoldEvent(
-  calendarId: string,
+  roomId: number,
   checkIn: Date,
   checkOut: Date,
   guest: HoldEventInfo,
 ): Promise<string> {
-  const calendar = getCalendarClient()
+  const room = await getRoom(roomId)
+  if (!room?.google_calendar_id) throw new Error(`Room ${roomId} has no calendar`)
 
+  const calendar = getCalendarClient()
   const checkInLabel = format(checkIn, "yyyy-MM-dd")
   const checkOutLabel = format(checkOut, "yyyy-MM-dd")
   const createdAt = format(new Date(), "dd/MM/yyyy HH:mm")
@@ -141,7 +155,7 @@ export async function createHoldEvent(
   ]
 
   const response = await calendar.events.insert({
-    calendarId,
+    calendarId: room.google_calendar_id,
     requestBody: {
       summary: `⏳ Trip'n Book — ${guest.fullName}`,
       description: descriptionLines.join("\n"),
@@ -151,9 +165,7 @@ export async function createHoldEvent(
   })
 
   const eventId = response.data.id
-  if (!eventId) {
-    throw new Error("Google Calendar did not return an event ID")
-  }
+  if (!eventId) throw new Error("Google Calendar did not return an event ID")
 
   return eventId
 }
@@ -163,20 +175,22 @@ export async function createHoldEvent(
  * removes the ⏳ pending marker and appends a Stripe payment link to the description.
  */
 export async function confirmHoldEvent(
-  calendarId: string,
+  roomId: number,
   eventId: string,
   paymentIntentId: string,
 ): Promise<void> {
-  const calendar = getCalendarClient()
+  const room = await getRoom(roomId)
+  if (!room?.google_calendar_id) throw new Error(`Room ${roomId} has no calendar`)
 
-  const event = await calendar.events.get({ calendarId, eventId })
+  const calendar = getCalendarClient()
+  const event = await calendar.events.get({ calendarId: room.google_calendar_id, eventId })
   const summary = (event.data.summary ?? "").replace("⏳ ", "✅ ")
   const description = (event.data.description ?? "")
     .replace("en attente de paiement", "payé")
     + `\nStripe : ${STRIPE_DASHBOARD_URL}/${paymentIntentId}`
 
   await calendar.events.patch({
-    calendarId,
+    calendarId: room.google_calendar_id,
     eventId,
     requestBody: { summary, description },
   })
@@ -187,13 +201,15 @@ export async function confirmHoldEvent(
  * Silently ignores "not found" errors — the event may have already been removed.
  */
 export async function deleteHoldEvent(
-  calendarId: string,
+  roomId: number,
   eventId: string,
 ): Promise<void> {
-  const calendar = getCalendarClient()
+  const room = await getRoom(roomId)
+  if (!room?.google_calendar_id) return
 
+  const calendar = getCalendarClient()
   try {
-    await calendar.events.delete({ calendarId, eventId })
+    await calendar.events.delete({ calendarId: room.google_calendar_id, eventId })
   } catch (err: unknown) {
     const isNotFound = err instanceof Error && "code" in err && (err as { code: number }).code === 404
     if (!isNotFound) throw err
