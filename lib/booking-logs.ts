@@ -1,4 +1,5 @@
 import type { SqlExecutor } from "./checkout"
+import { parseISO, startOfDay, addDays } from "date-fns"
 
 export type BookingLog = {
   id: number
@@ -45,6 +46,34 @@ export async function insertBookingLog(
       (${roomName}, ${fullName}, ${adultsCount}, ${childrenCount}, ${checkIn}, ${checkOut},
        ${nightCount}, ${totalPrice}, ${email}, ${phone}, ${specialNeeds || null}, ${stripeSessionId}, ${expiresAt}, ${sessionId})
   `
+}
+
+export async function getHoldDates(
+  sql: SqlExecutor,
+  roomName: string,
+  sessionId: string,
+): Promise<Set<string>> {
+  const rows = await sql`
+    SELECT check_in, check_out
+    FROM booking_logs
+    WHERE room_name = ${roomName}
+      AND session_id = ${sessionId}
+      AND status = 'pending'
+      AND expires_at > NOW()
+  `
+
+  const holdDates = new Set<string>()
+  for (const row of rows) {
+    const checkIn = startOfDay(parseISO(row.check_in as string))
+    const checkOut = startOfDay(parseISO(row.check_out as string))
+    let day = checkIn
+    while (day < checkOut) {
+      holdDates.add(day.toISOString())
+      day = addDays(day, 1)
+    }
+  }
+
+  return holdDates
 }
 
 export async function updateBookingLogStatus(
