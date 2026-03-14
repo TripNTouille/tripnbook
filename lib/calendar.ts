@@ -143,6 +143,8 @@ export type HoldEventInfo = {
   email: string
   phone: string
   specialNeeds: string
+  adultsCount: number
+  childrenCount: number
 }
 
 const STRIPE_DASHBOARD_URL = "https://dashboard.stripe.com/payments"
@@ -168,10 +170,14 @@ export async function createHoldEvent(
   const checkOutLabel = format(checkOut, "yyyy-MM-dd")
   const createdAt = format(new Date(), "dd/MM/yyyy HH:mm")
 
+  const totalGuests = guest.adultsCount + guest.childrenCount
+  const guestLabel = `${totalGuests} pers. (${guest.adultsCount} ad.${guest.childrenCount > 0 ? `, ${guest.childrenCount} enf.` : ""})`
+
   const descriptionLines = [
     `Réservation via Trip'n Book — en attente de paiement`,
     ``,
     `Nom : ${guest.fullName}`,
+    `Voyageurs : ${guestLabel}`,
     `Email : ${guest.email}`,
     `Téléphone : ${guest.phone}`,
     ...(guest.specialNeeds ? [`Demandes : ${guest.specialNeeds}`] : []),
@@ -182,7 +188,7 @@ export async function createHoldEvent(
   const response = await calendar.events.insert({
     calendarId: room.google_calendar_id,
     requestBody: {
-      summary: `⏳ Trip'n Book — ${guest.fullName}`,
+      summary: `⏳ ${guest.fullName} — Trip'n Book`,
       description: descriptionLines.join("\n"),
       start: { dateTime: `${checkInLabel}T16:00:00`, timeZone: "Europe/Paris" },
       end: { dateTime: `${checkOutLabel}T11:00:00`, timeZone: "Europe/Paris" },
@@ -209,7 +215,7 @@ export async function confirmHoldEvent(
 
   const calendar = getCalendarClient()
   const event = await calendar.events.get({ calendarId: room.google_calendar_id, eventId })
-  const summary = (event.data.summary ?? "").replace("⏳ ", "✅ ")
+  const summary = (event.data.summary ?? "").replace("⏳ ", "")
   const description = (event.data.description ?? "")
     .replace("en attente de paiement", "payé")
     + `\nStripe : ${STRIPE_DASHBOARD_URL}/${paymentIntentId}`
