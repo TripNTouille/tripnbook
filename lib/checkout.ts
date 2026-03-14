@@ -116,6 +116,8 @@ export async function createCheckoutSession(
     email,
     phone,
     specialNeeds,
+    adultsCount,
+    childrenCount,
   })
 
   const totalGuests = adultsCount + childrenCount
