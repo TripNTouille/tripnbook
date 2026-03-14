@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import Stripe from "stripe"
 import { getDb } from "@/lib/db"
-import { getRoom } from "@/lib/rooms"
-import { areDatesFree, createHoldEvent, confirmHoldEvent, deleteHoldEvent } from "@/lib/google-calendar"
+
+import { checkDatesAvailability, createHoldEvent, confirmHoldEvent, deleteHoldEvent } from "@/lib/calendar"
 import { createCheckoutSession, DatesUnavailableError, type CalendarDeps } from "@/lib/checkout"
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
@@ -10,11 +10,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 })
 
 const calendar: CalendarDeps = {
-  getCalendarId: async (roomId) => {
-    const room = await getRoom(roomId)
-    return room?.google_calendar_id ?? null
-  },
-  areDatesFree,
+  checkDatesAvailability,
   createHoldEvent,
   confirmHoldEvent,
   deleteHoldEvent,

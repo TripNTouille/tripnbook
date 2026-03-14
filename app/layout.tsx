@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Footer from "@/components/Footer";
+import { SessionIdProvider } from "@/components/SessionIdProvider";
 // Vercel Analytics
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { Analytics } from "@vercel/analytics/next"
@@ -38,9 +39,11 @@ export default async function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <SessionIdProvider>
+          {children}
 
-        <Footer />
+          <Footer />
+        </SessionIdProvider>
       </body>
     </html>
   );

@@ -12,10 +12,9 @@ type BookingFormProps = {
   roomId: number
   roomName: string
   capacity: RoomCapacity
-  busyDates: string[]
 }
 
-export default function BookingForm({ roomId, roomName, capacity, busyDates }: BookingFormProps) {
+export default function BookingForm({ roomId, roomName, capacity }: BookingFormProps) {
   const [adultsCount, setAdultsCount] = React.useState(2)
   const [childrenCount, setChildrenCount] = React.useState(0)
   const [dialogDates, setDialogDates] = React.useState<{ from: Date; to: Date } | null>(null)
@@ -45,7 +44,6 @@ export default function BookingForm({ roomId, roomName, capacity, busyDates }: B
 
       <DateRangePicker
         roomId={roomId}
-        busyDates={busyDates}
         onBook={(from, to) => setDialogDates({ from, to })}
       />
 

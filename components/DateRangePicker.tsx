@@ -6,6 +6,7 @@ import type { DateRange } from "react-day-picker"
 
 import { Calendar } from "@/components/ui/calendar"
 import { Button } from "@/components/ui/button"
+import { useSessionId } from "@/components/SessionIdProvider"
 
 function useClientReady() {
   const [ready, setReady] = React.useState<{
@@ -33,11 +34,12 @@ function useClientReady() {
   return ready
 }
 
-async function fetchBusyDates(roomId: number, from: Date, to: Date): Promise<string[]> {
+async function fetchBusyDates(roomId: number, from: Date, to: Date, sessionId: string): Promise<string[]> {
   const params = new URLSearchParams({
     roomId: String(roomId),
     from: from.toISOString(),
     to: to.toISOString(),
+    sessionId,
   })
   const response = await fetch(`/api/busy-dates?${params}`)
   if (!response.ok) return []
@@ -47,30 +49,42 @@ async function fetchBusyDates(roomId: number, from: Date, to: Date): Promise<str
 
 type DateRangePickerProps = {
   roomId: number
-  busyDates?: string[]
   onBook?: (from: Date, to: Date) => void
 }
 
-export default function DateRangePicker({ roomId, busyDates = [], onBook }: DateRangePickerProps) {
+export default function DateRangePicker({ roomId, onBook }: DateRangePickerProps) {
   const client = useClientReady()
+  const sessionId = useSessionId()
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>()
 
   // All known busy dates as ISO strings (initial + dynamically fetched)
   const [allBusyDates, setAllBusyDates] = React.useState<Set<string>>(
-    () => new Set(busyDates),
+    () => new Set(),
   )
 
   // Track which month ranges we've already fetched so we don't re-fetch
   const fetchedRangesRef = React.useRef<Set<string>>(new Set())
 
-  // Mark the initial server-fetched range as already covered (visible months + 1 buffer on each side)
+  // Mark the initial range as already covered and fetch initial busy dates once sessionId is ready
   React.useEffect(() => {
+    if (!client || !sessionId) return
+
     const now = new Date()
     for (let i = 0; i < 5; i++) {
       const key = monthKey(addMonths(now, i))
       fetchedRangesRef.current.add(key)
     }
-  }, [])
+
+    const in5Months = addMonths(now, 5)
+    fetchBusyDates(roomId, now, in5Months, sessionId).then((newDates) => {
+      if (newDates.length === 0) return
+      setAllBusyDates((prev) => {
+        const next = new Set(prev)
+        for (const d of newDates) next.add(d)
+        return next
+      })
+    })
+  }, [roomId, sessionId, client])
 
   const busyDateObjects = React.useMemo(
     () => Array.from(allBusyDates).map((iso) => new Date(iso)),
@@ -119,7 +133,7 @@ export default function DateRangePicker({ roomId, busyDates = [], onBook }: Date
     const from = startOfMonth(monthsToFetch[0])
     const to = startOfMonth(addMonths(monthsToFetch[monthsToFetch.length - 1], 1))
 
-    fetchBusyDates(roomId, from, to).then((newDates) => {
+    fetchBusyDates(roomId, from, to, sessionId).then((newDates) => {
       if (newDates.length === 0) return
       setAllBusyDates((prev) => {
         const next = new Set(prev)

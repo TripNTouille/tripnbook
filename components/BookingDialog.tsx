@@ -3,6 +3,7 @@ import { format, differenceInDays } from "date-fns"
 import { fr } from "date-fns/locale"
 import { Info, Loader2 } from "lucide-react"
 import { calculatePrice } from "@/lib/pricing"
+import { useSessionId } from "@/components/SessionIdProvider"
 
 import {
   Dialog,
@@ -43,6 +44,7 @@ export default function BookingDialog({
   from,
   to,
 }: BookingDialogProps) {
+  const sessionId = useSessionId()
   const [fullName, setFullName] = React.useState("")
   const [email, setEmail] = React.useState("")
   const [phone, setPhone] = React.useState("")
@@ -78,6 +80,7 @@ export default function BookingDialog({
           phone: phone.trim(),
           specialNeeds: specialNeeds.trim(),
           returnUrl: window.location.pathname,
+          sessionId,
         }),
       })
 
