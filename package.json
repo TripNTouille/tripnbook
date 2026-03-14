@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "npm run seed && next dev",
+    "dev": "npm run schema && npm run seed && next dev",
     "build": "next build",
-    "start": "npm run seed && next start",
+    "start": "npm run schema && next start",
     "lint": "eslint",
+    "schema": "tsx scripts/schema.ts",
     "seed": "tsx scripts/seed.ts",
     "test": "vitest run"
   },
