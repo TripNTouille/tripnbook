@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "npm run schema && npm run seed && next dev",
-    "build": "next build",
+    "build": "npm run schema && next build",
     "start": "npm run schema && next start",
     "lint": "eslint",
     "schema": "tsx scripts/schema.ts",

@@ -5,7 +5,10 @@ loadEnv()
 
 async function createSchema() {
   const DATABASE_URL = process.env.DATABASE_URL
-  if (!DATABASE_URL) throw new Error("Missing DATABASE_URL environment variable")
+  if (!DATABASE_URL) {
+    console.log("No DATABASE_URL found, skipping schema creation")
+    return
+  }
 
   const sql = neon(DATABASE_URL)
 
