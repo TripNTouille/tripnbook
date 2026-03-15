@@ -1,20 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
-import Stripe from "stripe"
 import { getDb } from "@/lib/db"
-
-import { checkDatesAvailability, createHoldEvent, confirmHoldEvent, deleteHoldEvent } from "@/lib/calendar"
-import { createCheckoutSession, DatesUnavailableError, type CalendarDeps } from "@/lib/checkout"
-
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2026-02-25.clover",
-})
-
-const calendar: CalendarDeps = {
-  checkDatesAvailability,
-  createHoldEvent,
-  confirmHoldEvent,
-  deleteHoldEvent,
-}
+import { stripe, calendar } from "@/lib/deps"
+import { createCheckoutSession, DatesUnavailableError } from "@/lib/checkout"
 
 export async function POST(request: NextRequest) {
   const body = await request.json()

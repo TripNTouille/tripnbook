@@ -8,10 +8,10 @@ import {
   fulfillSession,
   handleWebhookEvent,
   DatesUnavailableError,
-  type SqlExecutor,
   type CalendarDeps,
   type EmailDeps,
 } from "./checkout"
+import type { SqlExecutor } from "./db"
 
 // -- In-memory Postgres via PGlite ------------------------------------------
 
@@ -57,8 +57,8 @@ function makeMockStripe(overrides: {
       roomName: "Jules Verne",
       adultsCount: "2",
       childrenCount: "0",
-      from: "1 janv. 2026",
-      to: "4 janv. 2026",
+      fromDate: "2026-01-01",
+      toDate: "2026-01-04",
       nightCount: "3",
       phone: "+33 6 00 00 00 00",
       specialNeeds: "",
@@ -149,7 +149,7 @@ function makeMockCalendar(overrides: {
     confirmHoldEvent: async () => {
       calls.confirmHoldEvent++
     },
-    deleteHoldEvent: async (_calendarId, eventId) => {
+    deleteHoldEvent: async (_roomId, eventId) => {
       calls.deleteHoldEvent++
       deletedEvents.push(eventId)
     },
@@ -173,8 +173,6 @@ const validInput = {
   roomName: "Jules Verne",
   adultsCount: 2,
   childrenCount: 0,
-  from: "1 janv. 2026",
-  to: "4 janv. 2026",
   fromDate: "2026-01-01",
   toDate: "2026-01-04",
   nightCount: 3,

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, afterAll, beforeEach } from "vitest"
 import { PGlite } from "@electric-sql/pglite"
 import { addMinutes, parseISO, startOfDay } from "date-fns"
 import { getHoldInfo } from "./booking-logs"
-import type { SqlExecutor } from "./checkout"
+import type { SqlExecutor } from "./db"
 
 // -- In-memory Postgres via PGlite ------------------------------------------
 

@@ -1,8 +1,10 @@
-import { parseISO } from "date-fns"
+import { parseISO, format } from "date-fns"
+import { fr } from "date-fns/locale"
 import type Stripe from "stripe"
 import type { HoldEventInfo } from "./calendar"
 import type { BookingConfirmationData } from "./email"
 import { insertBookingLog, updateBookingLogStatus } from "./booking-logs"
+import type { SqlExecutor } from "./db"
 
 // Stripe event types handled by the webhook
 const HANDLED_EVENTS = ["checkout.session.completed", "checkout.session.expired"] as const
@@ -11,15 +13,6 @@ type JsonResponse = {
   status: number
   body: Record<string, unknown>
 }
-
-/**
- * A SQL tagged-template executor compatible with both Neon and PGlite adapters.
- * Accepts a template and returns an array of row objects.
- */
-export type SqlExecutor = (
-  strings: TemplateStringsArray,
-  ...values: unknown[]
-) => Promise<Record<string, unknown>[]>
 
 /**
  * Calendar operations needed by checkout, injected for testability.
@@ -40,16 +33,14 @@ export type CheckoutInput = {
   roomName: string
   adultsCount: number
   childrenCount: number
-  from: string
-  to: string
-  fromDate: string // ISO date for calendar operations
-  toDate: string   // ISO date for calendar operations
+  fromDate: string
+  toDate: string
   nightCount: number
   totalPrice: number
   fullName: string
   email: string
   phone: string
-  specialNeeds: string
+  specialNeeds: string | null
   returnUrl: string
   origin: string
   sessionId: string
@@ -77,8 +68,6 @@ export async function createCheckoutSession(
     roomName,
     adultsCount,
     childrenCount,
-    from,
-    to,
     fromDate,
     toDate,
     nightCount,
@@ -97,6 +86,8 @@ export async function createCheckoutSession(
   // not in UTC (e.g. a Paris browser sending dates to a UTC Vercel server).
   const checkIn = parseISO(fromDate)
   const checkOut = parseISO(toDate)
+  const fromLabel = format(checkIn, "d MMM yyyy", { locale: fr })
+  const toLabel = format(checkOut, "d MMM yyyy", { locale: fr })
 
   // Block the dates on Google Calendar before creating the Stripe session
   let holdEventId: string | null = null
@@ -140,7 +131,7 @@ export async function createCheckoutSession(
             unit_amount: totalPrice * 100,
             product_data: {
               name: `${roomName} — ${nightCount} ${nightCount > 1 ? "nuits" : "nuit"}`,
-              description: `${guestLabel} · du ${from} au ${to} · Petit-déjeuner inclus`,
+              description: `${guestLabel} · du ${fromLabel} au ${toLabel} · Petit-déjeuner inclus`,
             },
           },
           quantity: 1,
@@ -152,8 +143,8 @@ export async function createCheckoutSession(
         fullName,
         adultsCount: String(adultsCount),
         childrenCount: String(childrenCount),
-        from,
-        to,
+        fromDate,
+        toDate,
         nightCount: String(nightCount),
         phone,
         specialNeeds,
@@ -170,24 +161,23 @@ export async function createCheckoutSession(
     throw err
   }
 
-  await insertBookingLog(
-  sql,
-  roomId,
-  roomName,
-  fullName,
-  adultsCount,
-  childrenCount,
-  fromDate,
-  toDate,
-  nightCount,
-  totalPrice,
-  email,
-  phone,
-  specialNeeds || null,
-  session.id,
-  expiresAt,
-  sessionId,
-)
+  await insertBookingLog(sql, {
+    roomId,
+    roomName,
+    fullName,
+    adultsCount,
+    childrenCount,
+    checkIn: fromDate,
+    checkOut: toDate,
+    nightCount,
+    totalPrice,
+    email,
+    phone,
+    specialNeeds,
+    stripeSessionId: session.id,
+    expiresAt,
+    sessionId,
+  })
 
   return { url: session.url }
 }
@@ -257,17 +247,24 @@ export async function fulfillSession(
 
   const updatedRows = await updateBookingLogStatus(sql, session.id, newStatus as "paid" | "cancelled")
 
-  const roomId = session.metadata?.roomId ? Number(session.metadata.roomId) : null
   const holdEventId = session.metadata?.holdEventId
 
-  if (roomId && holdEventId) {
-    if (isPaid) {
-      const paymentIntent = typeof session.payment_intent === "string"
-        ? session.payment_intent
-        : session.payment_intent?.id ?? session.id
-      await calendar.confirmHoldEvent(roomId, holdEventId, paymentIntent)
+  if (holdEventId) {
+    if (updatedRows.length === 0) {
+      // Either a replayed event (already processed) or a missing booking log.
+      // In both cases skip the calendar operation — on replay it was already done,
+      // on a missing log we have no trustworthy roomId to act on.
+      console.error(`fulfillSession: no booking log row found for Stripe session ${session.id} — skipping calendar operation`)
     } else {
-      await calendar.deleteHoldEvent(roomId, holdEventId)
+      const roomId = updatedRows[0].room_id as number
+      if (isPaid) {
+        const paymentIntent = typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : session.payment_intent?.id ?? session.id
+        await calendar.confirmHoldEvent(roomId, holdEventId, paymentIntent)
+      } else {
+        await calendar.deleteHoldEvent(roomId, holdEventId)
+      }
     }
   }
 
@@ -282,8 +279,8 @@ export async function fulfillSession(
       roomName: meta.roomName ?? "",
       adultsCount: Number(meta.adultsCount ?? 0),
       childrenCount: Number(meta.childrenCount ?? 0),
-      from: meta.from ?? "",
-      to: meta.to ?? "",
+      from: meta.fromDate ? format(parseISO(meta.fromDate), "d MMM yyyy", { locale: fr }) : "",
+      to: meta.toDate ? format(parseISO(meta.toDate), "d MMM yyyy", { locale: fr }) : "",
       nightCount: Number(meta.nightCount ?? 0),
       totalPrice: Math.round((session.amount_total ?? 0) / 100),
     })
