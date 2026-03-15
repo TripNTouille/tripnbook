@@ -4,6 +4,7 @@ import type Stripe from "stripe"
 import type { HoldEventInfo } from "./calendar"
 import type { BookingConfirmationData } from "./email"
 import { insertBookingLog, updateBookingLogStatus } from "./booking-logs"
+import type { SqlExecutor } from "./db"
 
 // Stripe event types handled by the webhook
 const HANDLED_EVENTS = ["checkout.session.completed", "checkout.session.expired"] as const
@@ -12,15 +13,6 @@ type JsonResponse = {
   status: number
   body: Record<string, unknown>
 }
-
-/**
- * A SQL tagged-template executor compatible with both Neon and PGlite adapters.
- * Accepts a template and returns an array of row objects.
- */
-export type SqlExecutor = (
-  strings: TemplateStringsArray,
-  ...values: unknown[]
-) => Promise<Record<string, unknown>[]>
 
 /**
  * Calendar operations needed by checkout, injected for testability.

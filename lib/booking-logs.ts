@@ -1,4 +1,4 @@
-import type { SqlExecutor } from "./checkout"
+import type { SqlExecutor } from "./db"
 import { parseISO, startOfDay, addDays } from "date-fns"
 
 export type BookingLog = {

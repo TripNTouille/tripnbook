@@ -8,10 +8,10 @@ import {
   fulfillSession,
   handleWebhookEvent,
   DatesUnavailableError,
-  type SqlExecutor,
   type CalendarDeps,
   type EmailDeps,
 } from "./checkout"
+import type { SqlExecutor } from "./db"
 
 // -- In-memory Postgres via PGlite ------------------------------------------
 
