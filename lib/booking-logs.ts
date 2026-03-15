@@ -73,23 +73,26 @@ export async function getHoldInfo(
       AND session_id = ${sessionId}
       AND status = 'pending'
       AND expires_at > NOW()
+    ORDER BY created_at DESC
+    LIMIT 1
   `
 
   const dates = new Set<string>()
-  let stripeSessionId: string | null = null
 
-  for (const row of rows) {
-    const checkIn = startOfDay(parseISO(row.check_in as string))
-    const checkOut = startOfDay(parseISO(row.check_out as string))
-    let day = checkIn
-    while (day < checkOut) {
-      dates.add(day.toISOString())
-      day = addDays(day, 1)
-    }
-    stripeSessionId = row.stripe_session_id as string | null
+  if (rows.length === 0) {
+    return { dates, stripeSessionId: null }
   }
 
-  return { dates, stripeSessionId }
+  const row = rows[0]
+  const checkIn = startOfDay(parseISO(row.check_in as string))
+  const checkOut = startOfDay(parseISO(row.check_out as string))
+  let day = checkIn
+  while (day < checkOut) {
+    dates.add(day.toISOString())
+    day = addDays(day, 1)
+  }
+
+  return { dates, stripeSessionId: row.stripe_session_id as string | null }
 }
 
 export async function updateBookingLogStatus(
