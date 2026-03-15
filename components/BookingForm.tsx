@@ -1,12 +1,15 @@
 "use client"
 
 import * as React from "react"
+import { differenceInDays } from "date-fns"
 import type { RoomCapacity } from "@/lib/rooms"
 import { clampChildrenAfterAdultsChange, clampAdultsAfterChildrenChange } from "@/lib/capacity"
 import GuestSelector from "@/components/GuestSelector"
 import DateRangePicker from "@/components/DateRangePicker"
 import BookingDialog from "@/components/BookingDialog"
 import CheckoutResultDialog from "@/components/CheckoutResultDialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
+import { Button } from "@/components/ui/button"
 
 type BookingFormProps = {
   roomId: number
@@ -18,6 +21,7 @@ export default function BookingForm({ roomId, roomName, capacity }: BookingFormP
   const [adultsCount, setAdultsCount] = React.useState(2)
   const [childrenCount, setChildrenCount] = React.useState(0)
   const [dialogDates, setDialogDates] = React.useState<{ from: Date; to: Date } | null>(null)
+  const [showWeekendDialog, setShowWeekendDialog] = React.useState(false)
 
   function handleAdultsChange(value: number) {
     setAdultsCount(value)
@@ -27,6 +31,16 @@ export default function BookingForm({ roomId, roomName, capacity }: BookingFormP
   function handleChildrenChange(value: number) {
     setChildrenCount(value)
     setAdultsCount(clampAdultsAfterChildrenChange(capacity, value, adultsCount))
+  }
+
+  function handleBook(from: Date, to: Date) {
+    const isSingleNight = differenceInDays(to, from) === 1
+    const isWeekendNight = from.getDay() === 5 || from.getDay() === 6 // Friday or Saturday
+    if (isSingleNight && isWeekendNight) {
+      setShowWeekendDialog(true)
+    } else {
+      setDialogDates({ from, to })
+    }
   }
 
   return (
@@ -44,10 +58,36 @@ export default function BookingForm({ roomId, roomName, capacity }: BookingFormP
 
       <DateRangePicker
         roomId={roomId}
-        onBook={(from, to) => setDialogDates({ from, to })}
+        onBook={handleBook}
       />
 
       <CheckoutResultDialog />
+
+      <Dialog open={showWeekendDialog} onOpenChange={setShowWeekendDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Séjour d&apos;une nuit en week-end</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Désolé, nous n&apos;acceptons pas les réservations d&apos;une nuit le vendredi ou le samedi.
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Pour une demande spéciale, n&apos;hésitez pas à nous contacter directement via{" "}
+            <a
+              href="https://tripntouille.com/contact/#nous-ecrire"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline"
+            >
+              notre formulaire de contact
+            </a>
+            .
+          </p>
+          <DialogFooter>
+            <Button onClick={() => setShowWeekendDialog(false)}>Fermer</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {dialogDates && (
         <BookingDialog
