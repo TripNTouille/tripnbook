@@ -256,17 +256,24 @@ export async function fulfillSession(
 
   const updatedRows = await updateBookingLogStatus(sql, session.id, newStatus as "paid" | "cancelled")
 
-  const roomId = session.metadata?.roomId ? Number(session.metadata.roomId) : null
   const holdEventId = session.metadata?.holdEventId
 
-  if (roomId && holdEventId) {
-    if (isPaid) {
-      const paymentIntent = typeof session.payment_intent === "string"
-        ? session.payment_intent
-        : session.payment_intent?.id ?? session.id
-      await calendar.confirmHoldEvent(roomId, holdEventId, paymentIntent)
+  if (holdEventId) {
+    if (updatedRows.length === 0) {
+      // Either a replayed event (already processed) or a missing booking log.
+      // In both cases skip the calendar operation — on replay it was already done,
+      // on a missing log we have no trustworthy roomId to act on.
+      console.error(`fulfillSession: no booking log row found for Stripe session ${session.id} — skipping calendar operation`)
     } else {
-      await calendar.deleteHoldEvent(roomId, holdEventId)
+      const roomId = updatedRows[0].room_id as number
+      if (isPaid) {
+        const paymentIntent = typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : session.payment_intent?.id ?? session.id
+        await calendar.confirmHoldEvent(roomId, holdEventId, paymentIntent)
+      } else {
+        await calendar.deleteHoldEvent(roomId, holdEventId)
+      }
     }
   }
 
