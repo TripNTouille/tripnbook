@@ -40,7 +40,7 @@ export type CheckoutInput = {
   fullName: string
   email: string
   phone: string
-  specialNeeds: string
+  specialNeeds: string | null
   returnUrl: string
   origin: string
   sessionId: string
@@ -173,7 +173,7 @@ export async function createCheckoutSession(
     totalPrice,
     email,
     phone,
-    specialNeeds: specialNeeds || null,
+    specialNeeds,
     stripeSessionId: session.id,
     expiresAt,
     sessionId,

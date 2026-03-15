@@ -76,7 +76,7 @@ export default function BookingDialog({
           fullName: fullName.trim(),
           email: email.trim(),
           phone: phone.trim(),
-          specialNeeds: specialNeeds.trim(),
+          specialNeeds: specialNeeds.trim() || null,
           returnUrl: window.location.pathname,
           sessionId,
         }),

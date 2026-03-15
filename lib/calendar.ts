@@ -142,7 +142,7 @@ export type HoldEventInfo = {
   fullName: string
   email: string
   phone: string
-  specialNeeds: string
+  specialNeeds: string | null
   adultsCount: number
   childrenCount: number
 }
