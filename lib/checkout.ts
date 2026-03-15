@@ -1,4 +1,5 @@
-import { parseISO } from "date-fns"
+import { parseISO, format } from "date-fns"
+import { fr } from "date-fns/locale"
 import type Stripe from "stripe"
 import type { HoldEventInfo } from "./calendar"
 import type { BookingConfirmationData } from "./email"
@@ -40,10 +41,8 @@ export type CheckoutInput = {
   roomName: string
   adultsCount: number
   childrenCount: number
-  from: string
-  to: string
-  fromDate: string // ISO date for calendar operations
-  toDate: string   // ISO date for calendar operations
+  fromDate: string
+  toDate: string
   nightCount: number
   totalPrice: number
   fullName: string
@@ -77,8 +76,6 @@ export async function createCheckoutSession(
     roomName,
     adultsCount,
     childrenCount,
-    from,
-    to,
     fromDate,
     toDate,
     nightCount,
@@ -97,6 +94,8 @@ export async function createCheckoutSession(
   // not in UTC (e.g. a Paris browser sending dates to a UTC Vercel server).
   const checkIn = parseISO(fromDate)
   const checkOut = parseISO(toDate)
+  const fromLabel = format(checkIn, "d MMM yyyy", { locale: fr })
+  const toLabel = format(checkOut, "d MMM yyyy", { locale: fr })
 
   // Block the dates on Google Calendar before creating the Stripe session
   let holdEventId: string | null = null
@@ -140,7 +139,7 @@ export async function createCheckoutSession(
             unit_amount: totalPrice * 100,
             product_data: {
               name: `${roomName} — ${nightCount} ${nightCount > 1 ? "nuits" : "nuit"}`,
-              description: `${guestLabel} · du ${from} au ${to} · Petit-déjeuner inclus`,
+              description: `${guestLabel} · du ${fromLabel} au ${toLabel} · Petit-déjeuner inclus`,
             },
           },
           quantity: 1,
@@ -152,8 +151,8 @@ export async function createCheckoutSession(
         fullName,
         adultsCount: String(adultsCount),
         childrenCount: String(childrenCount),
-        from,
-        to,
+        fromDate,
+        toDate,
         nightCount: String(nightCount),
         phone,
         specialNeeds,
@@ -282,8 +281,8 @@ export async function fulfillSession(
       roomName: meta.roomName ?? "",
       adultsCount: Number(meta.adultsCount ?? 0),
       childrenCount: Number(meta.childrenCount ?? 0),
-      from: meta.from ?? "",
-      to: meta.to ?? "",
+      from: meta.fromDate ? format(parseISO(meta.fromDate), "d MMM yyyy", { locale: fr }) : "",
+      to: meta.toDate ? format(parseISO(meta.toDate), "d MMM yyyy", { locale: fr }) : "",
       nightCount: Number(meta.nightCount ?? 0),
       totalPrice: Math.round((session.amount_total ?? 0) / 100),
     })

@@ -69,8 +69,6 @@ export default function BookingDialog({
           roomName,
           adultsCount,
           childrenCount,
-          from: format(from, "d MMM yyyy", { locale: fr }),
-          to: format(to, "d MMM yyyy", { locale: fr }),
           fromDate: format(from, "yyyy-MM-dd"),
           toDate: format(to, "yyyy-MM-dd"),
           nightCount,
