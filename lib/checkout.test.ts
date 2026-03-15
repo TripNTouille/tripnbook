@@ -149,7 +149,7 @@ function makeMockCalendar(overrides: {
     confirmHoldEvent: async () => {
       calls.confirmHoldEvent++
     },
-    deleteHoldEvent: async (_calendarId, eventId) => {
+    deleteHoldEvent: async (_roomId, eventId) => {
       calls.deleteHoldEvent++
       deletedEvents.push(eventId)
     },
