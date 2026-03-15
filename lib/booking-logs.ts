@@ -22,24 +22,30 @@ export type BookingLog = {
   expires_at: Date
 }
 
+export type BookingLogInput = {
+  roomId: number
+  roomName: string
+  fullName: string | null
+  adultsCount: number
+  childrenCount: number
+  checkIn: string
+  checkOut: string
+  nightCount: number
+  totalPrice: number
+  email: string
+  phone: string
+  specialNeeds: string | null
+  stripeSessionId: string
+  expiresAt: Date
+  sessionId: string
+}
+
 export async function insertBookingLog(
   sql: SqlExecutor,
-  roomId: number,
-  roomName: string,
-  fullName: string | null,
-  adultsCount: number,
-  childrenCount: number,
-  checkIn: string,
-  checkOut: string,
-  nightCount: number,
-  totalPrice: number,
-  email: string,
-  phone: string,
-  specialNeeds: string | null,
-  stripeSessionId: string,
-  expiresAt: Date,
-  sessionId: string,
+  input: BookingLogInput,
 ): Promise<void> {
+  const { roomId, roomName, fullName, adultsCount, childrenCount, checkIn, checkOut,
+    nightCount, totalPrice, email, phone, specialNeeds, stripeSessionId, expiresAt, sessionId } = input
   await sql`
     INSERT INTO booking_logs
       (room_id, room_name, full_name, adults_count, children_count, check_in, check_out,

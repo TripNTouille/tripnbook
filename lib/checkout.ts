@@ -169,24 +169,23 @@ export async function createCheckoutSession(
     throw err
   }
 
-  await insertBookingLog(
-  sql,
-  roomId,
-  roomName,
-  fullName,
-  adultsCount,
-  childrenCount,
-  fromDate,
-  toDate,
-  nightCount,
-  totalPrice,
-  email,
-  phone,
-  specialNeeds || null,
-  session.id,
-  expiresAt,
-  sessionId,
-)
+  await insertBookingLog(sql, {
+    roomId,
+    roomName,
+    fullName,
+    adultsCount,
+    childrenCount,
+    checkIn: fromDate,
+    checkOut: toDate,
+    nightCount,
+    totalPrice,
+    email,
+    phone,
+    specialNeeds: specialNeeds || null,
+    stripeSessionId: session.id,
+    expiresAt,
+    sessionId,
+  })
 
   return { url: session.url }
 }
