@@ -8,6 +8,7 @@ import {
   fulfillSession,
   handleWebhookEvent,
   DatesUnavailableError,
+  DatesOutsideWindowError,
   type CalendarDeps,
   type EmailDeps,
 } from "./checkout"
@@ -189,6 +190,10 @@ const validInput = {
 // -- Setup / teardown --------------------------------------------------------
 
 beforeAll(async () => {
+  // Cover validInput dates (2026-01-01 → 2026-01-04) for all tests
+  process.env.BOOKING_MIN_DATE = "2025-01-01"
+  process.env.BOOKING_MAX_DATE = "2027-12-31"
+
   db = new PGlite()
   sql = pgliteToSqlExecutor(db)
 
@@ -221,6 +226,8 @@ beforeEach(async () => {
 })
 
 afterAll(async () => {
+  delete process.env.BOOKING_MIN_DATE
+  delete process.env.BOOKING_MAX_DATE
   await db.close()
 })
 
@@ -364,6 +371,84 @@ describe("createCheckoutSession", () => {
     expect(capturedParams!.cancel_url).toBe(
       "http://localhost:3000/rooms/2?checkout=cancelled&session_id={CHECKOUT_SESSION_ID}"
     )
+  })
+})
+
+// -- Tests: booking window ---------------------------------------------------
+
+describe("createCheckoutSession — booking window", () => {
+  it("throws DatesOutsideWindowError when check-in is before the window", async () => {
+    process.env.BOOKING_MIN_DATE = "2026-06-01"
+    process.env.BOOKING_MAX_DATE = "2026-12-31"
+
+    const stripe = makeMockStripe()
+    const calendar = makeMockCalendar()
+
+    await expect(
+      createCheckoutSession(stripe, sql, calendar, validInput) // fromDate: 2026-01-01
+    ).rejects.toThrow(DatesOutsideWindowError)
+
+    process.env.BOOKING_MIN_DATE = "2025-01-01"
+    process.env.BOOKING_MAX_DATE = "2027-12-31"
+  })
+
+  it("throws DatesOutsideWindowError when check-out is after the window", async () => {
+    process.env.BOOKING_MIN_DATE = "2025-01-01"
+    process.env.BOOKING_MAX_DATE = "2026-01-02"
+
+    const stripe = makeMockStripe()
+    const calendar = makeMockCalendar()
+
+    await expect(
+      createCheckoutSession(stripe, sql, calendar, validInput) // toDate: 2026-01-04
+    ).rejects.toThrow(DatesOutsideWindowError)
+
+    process.env.BOOKING_MIN_DATE = "2025-01-01"
+    process.env.BOOKING_MAX_DATE = "2027-12-31"
+  })
+
+  it("does not create a hold event when outside the window", async () => {
+    process.env.BOOKING_MIN_DATE = "2026-06-01"
+    process.env.BOOKING_MAX_DATE = "2026-12-31"
+
+    const stripe = makeMockStripe()
+    const calendar = makeMockCalendar()
+
+    try {
+      await createCheckoutSession(stripe, sql, calendar, validInput)
+    } catch { /* expected */ }
+
+    expect(calendar.calls.createHoldEvent).toBe(0)
+
+    process.env.BOOKING_MIN_DATE = "2025-01-01"
+    process.env.BOOKING_MAX_DATE = "2027-12-31"
+  })
+
+  it("does not insert a booking log when outside the window", async () => {
+    process.env.BOOKING_MIN_DATE = "2026-06-01"
+    process.env.BOOKING_MAX_DATE = "2026-12-31"
+
+    const stripe = makeMockStripe()
+    const calendar = makeMockCalendar()
+
+    try {
+      await createCheckoutSession(stripe, sql, calendar, validInput)
+    } catch { /* expected */ }
+
+    const rows = (await db.query("SELECT * FROM booking_logs")).rows
+    expect(rows).toHaveLength(0)
+
+    process.env.BOOKING_MIN_DATE = "2025-01-01"
+    process.env.BOOKING_MAX_DATE = "2027-12-31"
+  })
+
+  it("succeeds when dates are within the window", async () => {
+    const stripe = makeMockStripe()
+    const calendar = makeMockCalendar()
+
+    const result = await createCheckoutSession(stripe, sql, calendar, validInput)
+
+    expect(result.url).toBe(FAKE_CHECKOUT_URL)
   })
 })
 

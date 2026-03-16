@@ -1,5 +1,5 @@
 import * as React from "react"
-import { startOfMonth, startOfDay, differenceInDays, addMonths, addDays, format } from "date-fns"
+import { startOfMonth, startOfDay, differenceInDays, addMonths, addDays, format, min, max } from "date-fns"
 import { fr } from "date-fns/locale"
 import { XIcon } from "lucide-react"
 import type { DateRange } from "react-day-picker"
@@ -7,6 +7,7 @@ import type { DateRange } from "react-day-picker"
 import { Calendar } from "@/components/ui/calendar"
 import { Button } from "@/components/ui/button"
 import { useSessionId } from "@/components/SessionIdProvider"
+import type { BookingWindow } from "@/lib/booking-window"
 
 function useClientReady() {
   const [ready, setReady] = React.useState<{
@@ -49,10 +50,11 @@ async function fetchBusyDates(roomId: number, from: Date, to: Date, sessionId: s
 
 type DateRangePickerProps = {
   roomId: number
+  bookingWindow: BookingWindow
   onBook?: (from: Date, to: Date) => void
 }
 
-export default function DateRangePicker({ roomId, onBook }: DateRangePickerProps) {
+export default function DateRangePicker({ roomId, bookingWindow, onBook }: DateRangePickerProps) {
   const client = useClientReady()
   const sessionId = useSessionId()
   const [dateRange, setDateRange] = React.useState<DateRange | undefined>()
@@ -69,14 +71,19 @@ export default function DateRangePicker({ roomId, onBook }: DateRangePickerProps
   React.useEffect(() => {
     if (!client || !sessionId) return
 
-    const now = new Date()
-    for (let i = 0; i < 5; i++) {
-      const key = monthKey(addMonths(now, i))
+    const fetchFrom = max([new Date(), bookingWindow.from])
+    const fetchTo = bookingWindow.to
+
+    // Nothing to fetch if the window is already closed
+    if (fetchFrom >= fetchTo) return
+
+    const monthsToMark = Math.ceil((fetchTo.getTime() - fetchFrom.getTime()) / (1000 * 60 * 60 * 24 * 30))
+    for (let i = 0; i <= monthsToMark; i++) {
+      const key = monthKey(addMonths(fetchFrom, i))
       fetchedRangesRef.current.add(key)
     }
 
-    const in5Months = addMonths(now, 5)
-    fetchBusyDates(roomId, now, in5Months, sessionId).then((newDates) => {
+    fetchBusyDates(roomId, fetchFrom, fetchTo, sessionId).then((newDates) => {
       if (newDates.length === 0) return
       setAllBusyDates((prev) => {
         const next = new Set(prev)
@@ -84,7 +91,7 @@ export default function DateRangePicker({ roomId, onBook }: DateRangePickerProps
         return next
       })
     })
-  }, [roomId, sessionId, client])
+  }, [roomId, sessionId, client, bookingWindow])
 
   const busyDateObjects = React.useMemo(
     () => Array.from(allBusyDates).map((iso) => new Date(iso)),
@@ -129,9 +136,11 @@ export default function DateRangePicker({ roomId, onBook }: DateRangePickerProps
 
     if (monthsToFetch.length === 0) return
 
-    // Fetch the full range covering all unfetched months in one request
-    const from = startOfMonth(monthsToFetch[0])
-    const to = startOfMonth(addMonths(monthsToFetch[monthsToFetch.length - 1], 1))
+    // Fetch the full range covering all unfetched months in one request, clamped to booking window
+    const from = max([startOfMonth(monthsToFetch[0]), bookingWindow.from])
+    const to = min([startOfMonth(addMonths(monthsToFetch[monthsToFetch.length - 1], 1)), bookingWindow.to])
+
+    if (from >= to) return
 
     fetchBusyDates(roomId, from, to, sessionId).then((newDates) => {
       if (newDates.length === 0) return
@@ -146,6 +155,9 @@ export default function DateRangePicker({ roomId, onBook }: DateRangePickerProps
   if (!client) return null
 
   const { today, isDesktop } = client
+
+  const calendarStartMonth = startOfMonth(max([today, bookingWindow.from]))
+  const calendarEndMonth = startOfMonth(bookingWindow.to)
 
   const hasCompleteRange = dateRange?.from && dateRange?.to
   const nightCount = hasCompleteRange
@@ -162,8 +174,9 @@ export default function DateRangePicker({ roomId, onBook }: DateRangePickerProps
         selected={dateRange}
         onSelect={setDateRange}
         onMonthChange={handleMonthChange}
-        defaultMonth={today}
-        startMonth={startOfMonth(today)}
+        defaultMonth={calendarStartMonth}
+        startMonth={calendarStartMonth}
+        endMonth={calendarEndMonth}
         modifiers={{
           // Remove strikethrough from firstBusyAfter so it looks selectable as checkout
           busy: selectionBoundaries?.firstBusyAfter
@@ -172,7 +185,8 @@ export default function DateRangePicker({ roomId, onBook }: DateRangePickerProps
         }}
         modifiersClassNames={{ busy: "line-through" }}
         disabled={[
-          { before: today },
+          { before: max([today, bookingWindow.from]) },
+          { after: bookingWindow.to },
           ...(selectionBoundaries
             ? [
                 ...(selectionBoundaries.firstBusyAfter ? [{ after: selectionBoundaries.firstBusyAfter }] : []),

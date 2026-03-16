@@ -1,4 +1,5 @@
 import { getRoom, getRoomCapacity, getRooms } from '@/lib/rooms'
+import { getBookingWindow } from '@/lib/booking-window'
 import { notFound } from 'next/navigation'
 import { ExternalLinkIcon } from "lucide-react"
 import BookingForm from '@/components/BookingForm'
@@ -18,6 +19,7 @@ export default async function BookRoomPage({
   }
 
   const capacity = await getRoomCapacity(room.id)
+  const bookingWindow = getBookingWindow()
 
   return (
     <div>
@@ -44,7 +46,7 @@ export default async function BookRoomPage({
       <div className="flex justify-center w-full mt-4">
         <div className="flex flex-col gap-4">
           {capacity && (
-            <BookingForm roomId={room.id} roomName={room.name} capacity={capacity} />
+            <BookingForm roomId={room.id} roomName={room.name} capacity={capacity} bookingWindow={bookingWindow} />
           )}
         </div>
       </div>
