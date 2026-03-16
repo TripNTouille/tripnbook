@@ -4,6 +4,7 @@ import type Stripe from "stripe"
 import type { HoldEventInfo } from "./calendar"
 import type { BookingConfirmationData } from "./email"
 import { insertBookingLog, updateBookingLogStatus } from "./booking-logs"
+import { getBookingWindow } from "./booking-window"
 import type { SqlExecutor } from "./db"
 
 // Stripe event types handled by the webhook
@@ -91,6 +92,12 @@ export async function createCheckoutSession(
 
   // Block the dates on Google Calendar before creating the Stripe session
   let holdEventId: string | null = null
+
+  const bookingWindow = getBookingWindow()
+  const isOutsideWindow = checkIn < bookingWindow.from || checkOut > bookingWindow.to
+  if (isOutsideWindow) {
+    throw new DatesOutsideWindowError()
+  }
 
   const { hasBusyDates, stripeSessionIdToExpire } = await calendar.checkDatesAvailability(roomId, checkIn, checkOut, sessionId)
   if (hasBusyDates) {
@@ -224,6 +231,13 @@ export class DatesUnavailableError extends Error {
   constructor() {
     super("Les dates sélectionnées ne sont plus disponibles")
     this.name = "DatesUnavailableError"
+  }
+}
+
+export class DatesOutsideWindowError extends Error {
+  constructor() {
+    super("Les dates sélectionnées sont en dehors de la période de réservation")
+    this.name = "DatesOutsideWindowError"
   }
 }
 
