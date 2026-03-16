@@ -71,8 +71,6 @@ export default function BookingDialog({
           childrenCount,
           fromDate: format(from, "yyyy-MM-dd"),
           toDate: format(to, "yyyy-MM-dd"),
-          nightCount,
-          totalPrice,
           fullName: fullName.trim(),
           email: email.trim(),
           phone: phone.trim(),

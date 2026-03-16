@@ -176,8 +176,6 @@ const validInput = {
   childrenCount: 0,
   fromDate: "2026-01-01",
   toDate: "2026-01-04",
-  nightCount: 3,
-  totalPrice: 225,
   fullName: "Jean Dupont",
   email: "test@example.com",
   phone: "+33 6 00 00 00 00",
@@ -323,7 +321,7 @@ describe("createCheckoutSession", () => {
     } as unknown as Stripe
     const calendar = makeMockCalendar()
 
-    await createCheckoutSession(stripe, sql, calendar, { ...validInput, nightCount: 1, totalPrice: 80 })
+    await createCheckoutSession(stripe, sql, calendar, { ...validInput, fromDate: "2026-01-01", toDate: "2026-01-02" })
 
     const lineItem = capturedParams!.line_items![0] as { price_data: { product_data: { name: string } } }
     expect(lineItem.price_data.product_data.name).toBe("Jules Verne — 1 nuit")
