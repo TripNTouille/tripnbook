@@ -1,9 +1,10 @@
-import { parseISO, format } from "date-fns"
+import { parseISO, format, differenceInDays } from "date-fns"
 import { fr } from "date-fns/locale"
 import type Stripe from "stripe"
 import type { HoldEventInfo } from "./calendar"
 import type { BookingConfirmationData } from "./email"
 import { insertBookingLog, updateBookingLogStatus } from "./booking-logs"
+import { calculatePrice } from "./pricing"
 import { getBookingWindow } from "./booking-window"
 import type { SqlExecutor } from "./db"
 
@@ -36,13 +37,10 @@ export type CheckoutInput = {
   childrenCount: number
   fromDate: string
   toDate: string
-  nightCount: number
-  totalPrice: number
   fullName: string
   email: string
   phone: string
   specialNeeds: string | null
-  returnUrl: string
   origin: string
   sessionId: string
 }
@@ -71,13 +69,10 @@ export async function createCheckoutSession(
     childrenCount,
     fromDate,
     toDate,
-    nightCount,
-    totalPrice,
     fullName,
     email,
     phone,
     specialNeeds,
-    returnUrl,
     origin,
     sessionId,
   } = input
@@ -89,6 +84,8 @@ export async function createCheckoutSession(
   const checkOut = parseISO(toDate)
   const fromLabel = format(checkIn, "d MMM yyyy", { locale: fr })
   const toLabel = format(checkOut, "d MMM yyyy", { locale: fr })
+  const nightCount = differenceInDays(checkOut, checkIn)
+  const { totalPrice } = calculatePrice({ nightCount, adultsCount, childrenCount })
 
   // Block the dates on Google Calendar before creating the Stripe session
   let holdEventId: string | null = null
@@ -157,8 +154,8 @@ export async function createCheckoutSession(
         specialNeeds,
         ...(holdEventId && { holdEventId }),
       },
-      success_url: `${origin}${returnUrl}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}${returnUrl}?checkout=cancelled&session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${origin}/rooms/${roomId}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/rooms/${roomId}?checkout=cancelled&session_id={CHECKOUT_SESSION_ID}`,
     })
   } catch (err) {
     // Clean up the hold event if Stripe session creation fails
