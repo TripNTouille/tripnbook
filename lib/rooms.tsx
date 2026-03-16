@@ -8,6 +8,13 @@ export type Room = {
   website_url: string | null;
 };
 
+export type PublicRoom = {
+  id: number;
+  name: string;
+  slug: string;
+  website_url: string | null;
+};
+
 export type RoomCapacity = {
   capacity: number;
   adults_min: number;
@@ -24,6 +31,17 @@ export async function getRooms(): Promise<Room[]> {
     name: r.name as string,
     slug: r.slug as string,
     google_calendar_id: r.google_calendar_id as string | null,
+    website_url: r.website_url as string | null,
+  }));
+}
+
+export async function getPublicRooms(): Promise<PublicRoom[]> {
+  const sql = getDb();
+  const rows = await sql`SELECT id, name, slug, website_url FROM rooms ORDER BY id`;
+  return rows.map((r) => ({
+    id: r.id as number,
+    name: r.name as string,
+    slug: r.slug as string,
     website_url: r.website_url as string | null,
   }));
 }

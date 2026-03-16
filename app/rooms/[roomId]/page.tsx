@@ -1,4 +1,4 @@
-import { getRoom, getRoomCapacity, getRooms } from '@/lib/rooms'
+import { getRoom, getRoomCapacity, getPublicRooms } from '@/lib/rooms'
 import { getBookingWindow } from '@/lib/booking-window'
 import { notFound } from 'next/navigation'
 import { ExternalLinkIcon } from "lucide-react"
@@ -41,7 +41,7 @@ export default async function BookRoomPage({
           </div>
         </div>
 
-      <RoomMenuBar rooms={await getRooms()} />
+      <RoomMenuBar rooms={await getPublicRooms()} />
 
       <div className="flex justify-center w-full mt-4">
         <div className="flex flex-col gap-4">

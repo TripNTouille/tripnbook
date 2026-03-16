@@ -3,9 +3,9 @@
 import Link from 'next/link'
 import { MenuIcon, XIcon } from 'lucide-react'
 import { useState } from 'react'
-import type { Room } from '@/lib/rooms'
+import type { PublicRoom } from '@/lib/rooms'
 
-export default function RoomMenuBar({ rooms }: { rooms: Room[] }) {
+export default function RoomMenuBar({ rooms }: { rooms: PublicRoom[] }) {
   const [open, setOpen] = useState(false)
 
   return (
