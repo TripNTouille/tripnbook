@@ -180,7 +180,6 @@ const validInput = {
   email: "test@example.com",
   phone: "+33 6 00 00 00 00",
   specialNeeds: "",
-  returnUrl: "/rooms/2",
   origin: "http://localhost:3000",
   sessionId: "550e8400-e29b-41d4-a716-446655440000",
 }

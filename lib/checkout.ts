@@ -41,7 +41,6 @@ export type CheckoutInput = {
   email: string
   phone: string
   specialNeeds: string | null
-  returnUrl: string
   origin: string
   sessionId: string
 }
@@ -74,7 +73,6 @@ export async function createCheckoutSession(
     email,
     phone,
     specialNeeds,
-    returnUrl,
     origin,
     sessionId,
   } = input
@@ -156,8 +154,8 @@ export async function createCheckoutSession(
         specialNeeds,
         ...(holdEventId && { holdEventId }),
       },
-      success_url: `${origin}${returnUrl}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${origin}${returnUrl}?checkout=cancelled&session_id={CHECKOUT_SESSION_ID}`,
+      success_url: `${origin}/rooms/${roomId}?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${origin}/rooms/${roomId}?checkout=cancelled&session_id={CHECKOUT_SESSION_ID}`,
     })
   } catch (err) {
     // Clean up the hold event if Stripe session creation fails
