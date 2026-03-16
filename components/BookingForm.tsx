@@ -3,6 +3,7 @@
 import * as React from "react"
 import { differenceInDays } from "date-fns"
 import type { RoomCapacity } from "@/lib/rooms"
+import type { BookingWindow } from "@/lib/booking-window"
 import { clampChildrenAfterAdultsChange, clampAdultsAfterChildrenChange } from "@/lib/capacity"
 import GuestSelector from "@/components/GuestSelector"
 import DateRangePicker from "@/components/DateRangePicker"
@@ -15,9 +16,10 @@ type BookingFormProps = {
   roomId: number
   roomName: string
   capacity: RoomCapacity
+  bookingWindow: BookingWindow
 }
 
-export default function BookingForm({ roomId, roomName, capacity }: BookingFormProps) {
+export default function BookingForm({ roomId, roomName, capacity, bookingWindow }: BookingFormProps) {
   const [adultsCount, setAdultsCount] = React.useState(2)
   const [childrenCount, setChildrenCount] = React.useState(0)
   const [dialogDates, setDialogDates] = React.useState<{ from: Date; to: Date } | null>(null)
@@ -58,6 +60,7 @@ export default function BookingForm({ roomId, roomName, capacity }: BookingFormP
 
       <DateRangePicker
         roomId={roomId}
+        bookingWindow={bookingWindow}
         onBook={handleBook}
       />
 
