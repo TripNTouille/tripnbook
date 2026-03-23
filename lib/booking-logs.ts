@@ -18,6 +18,7 @@ export type BookingLog = {
   stripe_session_id: string | null
   session_id: string
   status: string
+  confirmation_sent_at: Date | null
   created_at: Date
   expires_at: Date
 }
@@ -100,12 +101,22 @@ export async function updateBookingLogStatus(
   stripeSessionId: string,
   status: "paid" | "cancelled",
 ): Promise<BookingLog[]> {
-  const rows = await sql`
-    UPDATE booking_logs
-    SET status = ${status}
-    WHERE stripe_session_id = ${stripeSessionId} AND status = 'pending'
-    RETURNING *
-  `
+  // Set confirmation_sent_at atomically when paying so that only the first
+  // concurrent caller (redirect or webhook) gets a non-empty updatedRows —
+  // the other sees updatedRows.length === 0 and skips sending the email.
+  const rows = status === "paid"
+    ? await sql`
+        UPDATE booking_logs
+        SET status = ${status}, confirmation_sent_at = NOW()
+        WHERE stripe_session_id = ${stripeSessionId} AND status = 'pending'
+        RETURNING *
+      `
+    : await sql`
+        UPDATE booking_logs
+        SET status = ${status}
+        WHERE stripe_session_id = ${stripeSessionId} AND status = 'pending'
+        RETURNING *
+      `
 
   return rows as BookingLog[]
 }

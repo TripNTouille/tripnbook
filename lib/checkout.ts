@@ -84,6 +84,7 @@ export async function createCheckoutSession(
   const checkOut = parseISO(toDate)
   const fromLabel = format(checkIn, "d MMM yyyy", { locale: fr })
   const toLabel = format(checkOut, "d MMM yyyy", { locale: fr })
+  // Recompute from authoritative server-side values — never trust client-supplied figures
   const nightCount = differenceInDays(checkOut, checkIn)
   const { totalPrice } = calculatePrice({ nightCount, adultsCount, childrenCount })
 
@@ -165,23 +166,32 @@ export async function createCheckoutSession(
     throw err
   }
 
-  await insertBookingLog(sql, {
-    roomId,
-    roomName,
-    fullName,
-    adultsCount,
-    childrenCount,
-    checkIn: fromDate,
-    checkOut: toDate,
-    nightCount,
-    totalPrice,
-    email,
-    phone,
-    specialNeeds,
-    stripeSessionId: session.id,
-    expiresAt,
-    sessionId,
-  })
+  try {
+    await insertBookingLog(sql, {
+      roomId,
+      roomName,
+      fullName,
+      adultsCount,
+      childrenCount,
+      checkIn: fromDate,
+      checkOut: toDate,
+      nightCount,
+      totalPrice,
+      email,
+      phone,
+      specialNeeds,
+      stripeSessionId: session.id,
+      expiresAt,
+      sessionId,
+    })
+  } catch (err) {
+    // The Stripe session exists but we can't log it — clean up the hold event
+    // so the dates don't remain blocked, then re-throw so the caller gets a 500.
+    if (holdEventId) {
+      await calendar.deleteHoldEvent(roomId, holdEventId)
+    }
+    throw err
+  }
 
   return { url: session.url }
 }
@@ -260,6 +270,10 @@ export async function fulfillSession(
 
   const holdEventId = session.metadata?.holdEventId
 
+  // Calendar and email errors are caught independently so that:
+  // - a calendar failure doesn't prevent the confirmation email from being sent
+  // - an email failure doesn't cause a 500 that would trigger Stripe retries
+  // Both are logged for manual follow-up; the booking log is already updated above.
   if (holdEventId) {
     if (updatedRows.length === 0) {
       // Either a replayed event (already processed) or a missing booking log.
@@ -273,28 +287,33 @@ export async function fulfillSession(
           ? session.payment_intent
           : session.payment_intent?.id ?? session.id
         await calendar.confirmHoldEvent(roomId, holdEventId, paymentIntent)
+          .catch((err) => console.error("[checkout] Failed to confirm hold event", err))
       } else {
         await calendar.deleteHoldEvent(roomId, holdEventId)
+          .catch((err) => console.error("[checkout] Failed to delete hold event", err))
       }
     }
   }
 
   // Only send the email when this call actually transitioned the row from
   // 'pending' to 'paid' — guards against sending duplicates on replayed events.
+  // Read all email data from the RETURNING row (server-side, trusted values)
+  // rather than session.metadata (client-supplied, not re-validated).
+  // amount_total is the exception: it comes from Stripe directly and is authoritative.
   const wasJustPaid = isPaid && updatedRows.length > 0
   if (wasJustPaid) {
-    const meta = session.metadata ?? {}
+    const log = updatedRows[0]
     await email.sendConfirmation({
-      guestEmail: session.customer_email ?? "",
-      guestName: meta.fullName ?? "",
-      roomName: meta.roomName ?? "",
-      adultsCount: Number(meta.adultsCount ?? 0),
-      childrenCount: Number(meta.childrenCount ?? 0),
-      from: meta.fromDate ? format(parseISO(meta.fromDate), "d MMM yyyy", { locale: fr }) : "",
-      to: meta.toDate ? format(parseISO(meta.toDate), "d MMM yyyy", { locale: fr }) : "",
-      nightCount: Number(meta.nightCount ?? 0),
+      guestEmail: String(log.email ?? ""),
+      guestName: String(log.full_name ?? ""),
+      roomName: String(log.room_name ?? ""),
+      adultsCount: Number(log.adults_count ?? 0),
+      childrenCount: Number(log.children_count ?? 0),
+      from: String(log.check_in ?? ""),
+      to: String(log.check_out ?? ""),
+      nightCount: Number(log.night_count ?? 0),
       totalPrice: Math.round((session.amount_total ?? 0) / 100),
-    })
+    }).catch((err) => console.error("[checkout] Failed to send confirmation email", err))
   }
 }
 
