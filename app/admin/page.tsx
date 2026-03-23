@@ -1,5 +1,7 @@
 import { auth, signOut } from "@/lib/auth"
 import { redirect } from "next/navigation"
+import TestEmailForm from "./TestEmailForm"
+import { siteConfig } from "@/config/site"
 
 export default async function AdminPage() {
   const session = await auth()
@@ -18,6 +20,8 @@ export default async function AdminPage() {
           </button>
         </form>
       </div>
+
+      <TestEmailForm fromEmail={siteConfig.contactEmail} />
     </main>
   )
 }
