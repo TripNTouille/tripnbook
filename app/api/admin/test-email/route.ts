@@ -17,6 +17,7 @@ export async function POST(req: NextRequest) {
   await email.sendConfirmation({
     guestEmail: toEmail,
     guestName: "Test Email",
+    guestPhone: "+33 6 00 00 00 00",
     roomName: "Jules Verne",
     adultsCount: 2,
     childrenCount: 0,
@@ -24,6 +25,7 @@ export async function POST(req: NextRequest) {
     to: "4 janv. 2026",
     nightCount: 3,
     totalPrice: 225,
+    specialNeeds: "Allergie aux chats, lit bébé souhaité",
   })
 
   return NextResponse.json({ ok: true })

@@ -306,6 +306,7 @@ export async function fulfillSession(
     await email.sendConfirmation({
       guestEmail: String(log.email ?? ""),
       guestName: String(log.full_name ?? ""),
+      guestPhone: String(log.phone ?? ""),
       roomName: String(log.room_name ?? ""),
       adultsCount: Number(log.adults_count ?? 0),
       childrenCount: Number(log.children_count ?? 0),
@@ -313,6 +314,7 @@ export async function fulfillSession(
       to: String(log.check_out ?? ""),
       nightCount: Number(log.night_count ?? 0),
       totalPrice: Math.round((session.amount_total ?? 0) / 100),
+      specialNeeds: log.special_needs ? String(log.special_needs) : null,
     }).catch((err) => console.error("[checkout] Failed to send confirmation email", err))
   }
 }
