@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { fr } from "date-fns/locale"
 import {
   ChevronDownIcon,
   ChevronLeftIcon,
@@ -39,9 +40,11 @@ function Calendar({
         className
       )}
       captionLayout={captionLayout}
+      locale={fr}
+      weekStartsOn={1}
       formatters={{
         formatMonthDropdown: (date) =>
-          date.toLocaleString("default", { month: "short" }),
+          date.toLocaleString("fr-FR", { month: "short" }),
         ...formatters,
       }}
       classNames={{
