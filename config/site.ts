@@ -3,7 +3,7 @@
 const isProduction = process.env.VERCEL_ENV === "production"
 
 export const siteConfig = {
-  contactEmail: isProduction ? "contact@tripntouille.com" : "your-test-email@example.com",
+  contactEmail: isProduction ? "contact@tripntouille.com" : process.env.DEV_EMAIL!,
   contactPhone: {
     display: "+33 6 30 43 85 87",
     href: "+33630438587",

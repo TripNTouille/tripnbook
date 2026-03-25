@@ -30,7 +30,7 @@ function getCalendarClient(): calendar_v3.Calendar {
  * Queries Google Calendar for busy slots in monthly chunks.
  * The Google FreeBusy API limits queries to ~2 months, so we split the range automatically.
  */
-async function fetchBusySlotsFromGoogle(
+export async function fetchBusySlotsFromGoogle(
   calendarId: string,
   from: Date,
   to: Date,
