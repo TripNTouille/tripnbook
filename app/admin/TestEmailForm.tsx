@@ -33,7 +33,7 @@ export default function TestEmailForm({ fromEmail }: { fromEmail: string }) {
   }
 
   return (
-    <section className="border rounded-lg p-6 max-w-md">
+    <section className="border rounded-lg p-6">
       <h2 className="text-lg font-medium mb-1">Test d&apos;envoi d&apos;email</h2>
       <p className="text-sm text-gray-500 mb-1">
         Envoie un email de confirmation fictif via Resend.

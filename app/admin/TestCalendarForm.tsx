@@ -128,7 +128,7 @@ export default function TestCalendarForm() {
   const allIdle = WINDOWS.every(({ key }) => steps[key] === "idle")
 
   return (
-    <section className="border rounded-lg p-6 max-w-md">
+    <section className="border rounded-lg p-6">
       <h2 className="text-lg font-medium mb-1">Test Calendrier</h2>
       <p className="text-sm text-gray-500 mb-4">
         Vérifie la connexion Google Calendar et la disponibilité sur plusieurs périodes.

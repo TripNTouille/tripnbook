@@ -23,9 +23,11 @@ export default async function AdminPage() {
         </form>
       </div>
 
-      <TestEmailForm fromEmail={siteConfig.contactEmail} />
-      <TestStripeForm />
-      <TestCalendarForm />
+      <div className="grid grid-cols-3 gap-6">
+        <TestEmailForm fromEmail={siteConfig.contactEmail} />
+        <TestStripeForm />
+        <TestCalendarForm />
+      </div>
     </main>
   )
 }

@@ -71,7 +71,7 @@ export default function TestStripeForm() {
   const allIdle = steps.createSession === "idle"
 
   return (
-    <section className="border rounded-lg p-6 max-w-md">
+    <section className="border rounded-lg p-6">
       <h2 className="text-lg font-medium mb-1">Test Stripe</h2>
       <p className="text-sm text-gray-500 mb-4">
         Crée une session de paiement test et l&apos;expire immédiatement.
