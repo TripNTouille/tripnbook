@@ -1,6 +1,7 @@
 import { auth, signOut } from "@/lib/auth"
 import { redirect } from "next/navigation"
 import TestEmailForm from "./TestEmailForm"
+import TestStripeForm from "./TestStripeForm"
 import { siteConfig } from "@/config/site"
 
 export default async function AdminPage() {
@@ -22,6 +23,7 @@ export default async function AdminPage() {
       </div>
 
       <TestEmailForm fromEmail={siteConfig.contactEmail} />
+      <TestStripeForm />
     </main>
   )
 }
