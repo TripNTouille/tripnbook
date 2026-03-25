@@ -6,6 +6,7 @@ const OWNER_EMAIL = siteConfig.contactEmail
 export type BookingConfirmationData = {
   guestEmail: string
   guestName: string
+  guestPhone: string
   roomName: string
   adultsCount: number
   childrenCount: number
@@ -13,6 +14,7 @@ export type BookingConfirmationData = {
   to: string
   nightCount: number
   totalPrice: number
+  specialNeeds: string | null
 }
 
 /**
@@ -23,7 +25,7 @@ export async function sendBookingConfirmation(
   resend: Resend,
   data: BookingConfirmationData,
 ): Promise<void> {
-  const { guestEmail, guestName, roomName, adultsCount, childrenCount, from, to, nightCount, totalPrice } = data
+  const { guestEmail, guestName, guestPhone, roomName, adultsCount, childrenCount, from, to, nightCount, totalPrice, specialNeeds } = data
 
   const totalGuests = adultsCount + childrenCount
   const guestLabel = totalGuests > 1 ? `${totalGuests} personnes` : "1 personne"
@@ -37,12 +39,13 @@ export async function sendBookingConfirmation(
     to: guestEmail,
     bcc: OWNER_EMAIL,
     subject: `Confirmation de votre réservation — ${roomName}`,
-    html: buildEmailHtml({ guestName, roomName, guestLabel, childrenLabel, from, to, nightLabel, totalPrice }),
+    html: buildEmailHtml({ guestName, guestPhone, roomName, guestLabel, childrenLabel, from, to, nightLabel, totalPrice, specialNeeds }),
   })
 }
 
 type TemplateData = {
   guestName: string
+  guestPhone: string
   roomName: string
   guestLabel: string
   childrenLabel: string
@@ -50,6 +53,7 @@ type TemplateData = {
   to: string
   nightLabel: string
   totalPrice: number
+  specialNeeds: string | null
 }
 
 function buildEmailHtml(d: TemplateData): string {
@@ -91,11 +95,13 @@ function buildEmailHtml(d: TemplateData): string {
                   <td style="padding:24px;">
                     <p style="margin:0 0 16px;font-size:13px;text-transform:uppercase;letter-spacing:0.08em;color:#78716c;">Récapitulatif</p>
                     ${row("Chambre", d.roomName)}
+                    ${row("Nom", `${d.guestName} (${d.guestPhone})`)}
                     ${row("Voyageurs", d.guestLabel + d.childrenLabel)}
                     ${row("Arrivée", d.from)}
                     ${row("Départ", d.to)}
                     ${row("Durée", d.nightLabel)}
                     ${row("Prix total", `${d.totalPrice}&nbsp;€`, true)}
+                    ${d.specialNeeds ? row("Demandes spéciales", d.specialNeeds) : ""}
                     <p style="margin:12px 0 0;font-size:13px;color:#78716c;font-style:italic;">Petit-déjeuner inclus</p>
                   </td>
                 </tr>
