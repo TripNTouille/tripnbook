@@ -43,3 +43,6 @@ next-env.d.ts
 
 # Db seeding
 /scripts/seed*.ts
+
+# Sentry Config File
+.env.sentry-build-plugin
