@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import TestEmailForm from "./TestEmailForm"
 import TestStripeForm from "./TestStripeForm"
 import TestCalendarForm from "./TestCalendarForm"
+import TestSentryForm from "./TestSentryForm"
 import BookingLogsTable from "./BookingLogsTable"
 import { siteConfig } from "@/config/site"
 
@@ -24,10 +25,11 @@ export default async function AdminPage() {
         </form>
       </div>
 
-      <div className="grid grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <TestEmailForm fromEmail={siteConfig.contactEmail} />
         <TestStripeForm />
         <TestCalendarForm />
+        <TestSentryForm />
       </div>
 
       <div className="mt-8">
