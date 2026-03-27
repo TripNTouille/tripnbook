@@ -1,6 +1,7 @@
 import { google, calendar_v3 } from "googleapis"
 import { addDays, addMonths, startOfDay, startOfMonth, format } from "date-fns"
 import { getRoom } from "./rooms"
+import { DEV_CALENDAR_ID } from "@/config/site"
 import { getDb } from "./db"
 import { getHoldInfo } from "./booking-logs"
 
@@ -20,6 +21,13 @@ function getAuth() {
     key: privateKey.replace(/\\n/g, "\n"),
     scopes: SCOPES,
   })
+}
+
+// In non-production environments, override the room's calendar ID with a safe
+// test calendar so hold events don't pollute guest-facing calendars.
+function resolveCalendarId(room: { google_calendar_id: string | null }): string | null {
+  if (process.env.VERCEL_ENV !== "production") return DEV_CALENDAR_ID
+  return room.google_calendar_id
 }
 
 function getCalendarClient(): calendar_v3.Calendar {
@@ -95,9 +103,10 @@ export async function getBusyDates(
   sessionId: string,
 ): Promise<Date[]> {
   const room = await getRoom(roomId)
-  if (!room?.google_calendar_id) return []
+  const calendarId = room ? resolveCalendarId(room) : null
+  if (!calendarId) return []
 
-  const slots = await fetchBusySlotsFromGoogle(room.google_calendar_id, from, to)
+  const slots = await fetchBusySlotsFromGoogle(calendarId, from, to)
   const nights = slotsToNights(slots)
 
   const { dates: holdNights } = await getHoldInfo(getDb(), roomId, sessionId)
@@ -126,9 +135,10 @@ export async function checkDatesAvailability(
   const holdInfo = await getHoldInfo(getDb(), roomId, sessionId)
 
   const room = await getRoom(roomId)
-  if (!room?.google_calendar_id) return { hasBusyDates: false, stripeSessionIdToExpire: holdInfo.stripeSessionId }
+  const calendarId = room ? resolveCalendarId(room) : null
+  if (!calendarId) return { hasBusyDates: false, stripeSessionIdToExpire: holdInfo.stripeSessionId }
 
-  const slots = await fetchBusySlotsFromGoogle(room.google_calendar_id, checkIn, checkOut)
+  const slots = await fetchBusySlotsFromGoogle(calendarId, checkIn, checkOut)
   const nights = slotsToNights(slots)
 
   const confirmedNights = nights.filter((night) => !holdInfo.dates.has(night.toISOString()))
@@ -163,7 +173,8 @@ export async function createHoldEvent(
   guest: HoldEventInfo,
 ): Promise<string> {
   const room = await getRoom(roomId)
-  if (!room?.google_calendar_id) throw new Error(`Room ${roomId} has no calendar`)
+  const calendarId = room ? resolveCalendarId(room) : null
+  if (!calendarId) throw new Error(`Room ${roomId} has no calendar`)
 
   const calendar = getCalendarClient()
   const checkInLabel = format(checkIn, "yyyy-MM-dd")
@@ -186,7 +197,7 @@ export async function createHoldEvent(
   ]
 
   const response = await calendar.events.insert({
-    calendarId: room.google_calendar_id,
+    calendarId,
     requestBody: {
       summary: `⏳ ${guest.fullName} — Trip'n Book`,
       description: descriptionLines.join("\n"),
@@ -211,17 +222,18 @@ export async function confirmHoldEvent(
   paymentIntentId: string,
 ): Promise<void> {
   const room = await getRoom(roomId)
-  if (!room?.google_calendar_id) throw new Error(`Room ${roomId} has no calendar`)
+  const calendarId = room ? resolveCalendarId(room) : null
+  if (!calendarId) throw new Error(`Room ${roomId} has no calendar`)
 
   const calendar = getCalendarClient()
-  const event = await calendar.events.get({ calendarId: room.google_calendar_id, eventId })
+  const event = await calendar.events.get({ calendarId, eventId })
   const summary = (event.data.summary ?? "").replace("⏳ ", "")
   const description = (event.data.description ?? "")
     .replace("en attente de paiement", "payé")
     + `\nStripe : ${STRIPE_DASHBOARD_URL}/${paymentIntentId}`
 
   await calendar.events.patch({
-    calendarId: room.google_calendar_id,
+    calendarId,
     eventId,
     requestBody: { summary, description },
   })
@@ -236,11 +248,12 @@ export async function deleteHoldEvent(
   eventId: string,
 ): Promise<void> {
   const room = await getRoom(roomId)
-  if (!room?.google_calendar_id) return
+  const calendarId = room ? resolveCalendarId(room) : null
+  if (!calendarId) return
 
   const calendar = getCalendarClient()
   try {
-    await calendar.events.delete({ calendarId: room.google_calendar_id, eventId })
+    await calendar.events.delete({ calendarId, eventId })
   } catch (err: unknown) {
     const isNotFound = err instanceof Error && "code" in err && (err as { code: number }).code === 404
     if (!isNotFound) throw err
