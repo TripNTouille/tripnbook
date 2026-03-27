@@ -1,6 +1,10 @@
-// Use the real contact email only on production — everywhere else (local, preview)
-// routes to a personal address so Resend behaviour can be tested safely.
+// Use real external services only on production — everywhere else (local, preview)
+// we route to safe test values to avoid side effects.
 const isProduction = process.env.VERCEL_ENV === "production"
+
+// In non-production environments, use a dedicated test calendar instead of the
+// real room calendars from the DB, so tests don't pollute guest-facing calendars.
+export const DEV_CALENDAR_ID = "6b0cc1d7509e5eaf0ba2593034c4c369c74c612a83452a74265815fa2d979dbd@group.calendar.google.com"
 
 export const siteConfig = {
   contactEmail: isProduction ? "contact@tripntouille.com" : process.env.DEV_EMAIL!,
