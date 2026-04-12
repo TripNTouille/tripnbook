@@ -116,9 +116,6 @@ export async function createCheckoutSession(
     childrenCount,
   })
 
-  const totalGuests = adultsCount + childrenCount
-  const guestLabel = `${totalGuests} pers. (${adultsCount} ad.${childrenCount > 0 ? `, ${childrenCount} enf.` : ""})`
-
   // Expiry: 30 minutes from now (used for both Stripe session and booking log)
   const expiresAt = new Date(Date.now() + 30 * 60 * 1000)
   const expiresAtTimestamp = Math.floor(expiresAt.getTime() / 1000)
@@ -135,8 +132,8 @@ export async function createCheckoutSession(
             currency: "eur",
             unit_amount: totalPrice * 100,
             product_data: {
-              name: `${roomName} — ${nightCount} ${nightCount > 1 ? "nuits" : "nuit"}`,
-              description: `${guestLabel} · du ${fromLabel} au ${toLabel} · Petit-déjeuner inclus`,
+              name: `Chambre ${roomName} — ${nightCount} ${nightCount > 1 ? "nuits" : "nuit"}`,
+              description: `${adultsCount + childrenCount} personnes · Du ${fromLabel} au ${toLabel} · Petit-déjeuner inclus`,
             },
           },
           quantity: 1,
