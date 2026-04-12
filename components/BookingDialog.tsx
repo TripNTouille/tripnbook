@@ -54,7 +54,7 @@ export default function BookingDialog({
 
   const nightCount = differenceInDays(to, from)
   const totalGuests = adultsCount + childrenCount
-  const { pricePerNight, pricePerExtraGuest, extraGuests, totalPrice } = calculatePrice({ nightCount, adultsCount, childrenCount })
+  const { pricePerNight, pricePerExtraGuest, extraGuests, platformFee, totalPrice } = calculatePrice({ nightCount, adultsCount, childrenCount })
 
   async function handleConfirm() {
     setSubmitting(true)
@@ -120,11 +120,28 @@ export default function BookingDialog({
                     <Info className="size-3.5 text-muted-foreground cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent>
-                    <ul className="list-disc pl-3">
-                      <li>{pricePerNight} €/nuit</li>
-                      {extraGuests > 0 && <li>{extraGuests} pers. suppl. × {pricePerExtraGuest} €/nuit</li>}
-                      <li>{nightCount} {nightCount > 1 ? "nuits" : "nuit"}</li>
-                    </ul>
+                    <table className="text-xs border-separate border-spacing-x-3">
+                      <tbody>
+                        <tr>
+                          <td className="text-muted-foreground">{pricePerNight} €/nuit × {nightCount} {nightCount > 1 ? "nuits" : "nuit"}</td>
+                          <td className="text-right">{pricePerNight * nightCount} €</td>
+                        </tr>
+                        {extraGuests > 0 && (
+                          <tr>
+                            <td className="text-muted-foreground">{extraGuests} pers. suppl. × {pricePerExtraGuest} €/nuit × {nightCount} {nightCount > 1 ? "nuits" : "nuit"}</td>
+                            <td className="text-right">{extraGuests * pricePerExtraGuest * nightCount} €</td>
+                          </tr>
+                        )}
+                        <tr>
+                          <td className="text-muted-foreground">Frais de service</td>
+                          <td className="text-right">{platformFee} €</td>
+                        </tr>
+                        <tr className="border-t">
+                          <td className="pt-1 font-medium">Total</td>
+                          <td className="pt-1 text-right font-medium">{totalPrice} €</td>
+                        </tr>
+                      </tbody>
+                    </table>
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>

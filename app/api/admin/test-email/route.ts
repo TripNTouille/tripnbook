@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     from: "1 janv. 2026",
     to: "4 janv. 2026",
     nightCount: 3,
-    totalPrice: 225,
+    totalPrice: 227,
     specialNeeds: "Allergie aux chats, lit bébé souhaité",
   })
 
