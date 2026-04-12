@@ -256,7 +256,7 @@ describe("createCheckoutSession", () => {
     expect(log.check_in).toBe(validInput.fromDate)
     expect(log.check_out).toBe(validInput.toDate)
     expect(log.night_count).toBe(3)
-    expect(log.total_price).toBe(225)
+    expect(log.total_price).toBe(227)
     expect(log.email).toBe("test@example.com")
     expect(log.phone).toBe("+33 6 00 00 00 00")
     expect(log.stripe_session_id).toBe(FAKE_SESSION_ID)
@@ -302,9 +302,9 @@ describe("createCheckoutSession", () => {
     expect(capturedParams!.mode).toBe("payment")
 
     const lineItem = capturedParams!.line_items![0] as { price_data: { unit_amount: number; currency: string; product_data: { name: string } } }
-    expect(lineItem.price_data.unit_amount).toBe(22500)
+    expect(lineItem.price_data.unit_amount).toBe(22700)
     expect(lineItem.price_data.currency).toBe("eur")
-    expect(lineItem.price_data.product_data.name).toBe("Jules Verne — 3 nuits")
+    expect(lineItem.price_data.product_data.name).toBe("Chambre Jules Verne — 3 nuits")
   })
 
   it("uses singular 'nuit' for single-night bookings", async () => {
@@ -324,7 +324,7 @@ describe("createCheckoutSession", () => {
     await createCheckoutSession(stripe, sql, calendar, { ...validInput, fromDate: "2026-01-01", toDate: "2026-01-02" })
 
     const lineItem = capturedParams!.line_items![0] as { price_data: { product_data: { name: string } } }
-    expect(lineItem.price_data.product_data.name).toBe("Jules Verne — 1 nuit")
+    expect(lineItem.price_data.product_data.name).toBe("Chambre Jules Verne — 1 nuit")
   })
 
   it("includes children in the guest label", async () => {
@@ -344,7 +344,7 @@ describe("createCheckoutSession", () => {
     await createCheckoutSession(stripe, sql, calendar, { ...validInput, adultsCount: 2, childrenCount: 1 })
 
     const lineItem = capturedParams!.line_items![0] as { price_data: { product_data: { description: string } } }
-    expect(lineItem.price_data.product_data.description).toContain("3 pers. (2 ad., 1 enf.)")
+    expect(lineItem.price_data.product_data.description).toContain("3 personnes")
   })
 
   it("builds correct success and cancel URLs", async () => {
