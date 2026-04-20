@@ -19,7 +19,7 @@ updates:
       dev-deps:
         dependency-type: "development"
         update-types: ["minor", "patch"]
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -28,4 +28,4 @@ updates:
       day: "monday"
       time: "09:00"
       timezone: "Europe/Paris"
-    open-pull-requests-limit: 5
+    open-pull-requests-limit: 2
