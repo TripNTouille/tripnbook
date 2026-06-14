@@ -10,29 +10,26 @@ import { useSessionId } from "@/components/SessionIdProvider"
 import type { BookingWindow } from "@/lib/booking-window"
 
 function useClientReady() {
-  const [ready, setReady] = React.useState<{
-    today: Date
-    isDesktop: boolean
-  } | null>(null)
+  const isDesktop = React.useSyncExternalStore(
+    (callback) => {
+      const mql = window.matchMedia("(min-width: 768px)")
+      mql.addEventListener("change", callback)
+      return () => mql.removeEventListener("change", callback)
+    },
+    () => window.matchMedia("(min-width: 768px)").matches,
+    () => false,
+  )
 
-  React.useEffect(() => {
-    setReady({
-      today: startOfDay(new Date()),
-      isDesktop: window.matchMedia("(min-width: 768px)").matches,
-    })
+  const isClient = React.useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  )
 
-    function handleResize(e: MediaQueryListEvent) {
-      setReady((prev) =>
-        prev ? { ...prev, isDesktop: e.matches } : null
-      )
-    }
-
-    const mql = window.matchMedia("(min-width: 768px)")
-    mql.addEventListener("change", handleResize)
-    return () => mql.removeEventListener("change", handleResize)
-  }, [])
-
-  return ready
+  return React.useMemo(
+    () => (isClient ? { today: startOfDay(new Date()), isDesktop } : null),
+    [isClient, isDesktop],
+  )
 }
 
 async function fetchBusyDates(roomId: number, from: Date, to: Date, sessionId: string): Promise<string[]> {

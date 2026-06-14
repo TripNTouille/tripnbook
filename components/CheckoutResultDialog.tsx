@@ -30,43 +30,57 @@ type CheckoutResult =
   | { status: "success"; session: SessionData }
   | { status: "cancelled" }
 
+// Read URL checkout params once on first client render; cached so the
+// useSyncExternalStore snapshot stays referentially stable.
+let _checkoutCache: CheckoutResult | null | undefined = undefined
+
+function getCheckoutParam(): CheckoutResult | null {
+  if (_checkoutCache !== undefined) return _checkoutCache
+  const params = new URLSearchParams(window.location.search)
+  const checkout = params.get("checkout")
+  const sessionId = params.get("session_id")
+  if (!checkout || !sessionId) return (_checkoutCache = null)
+  if (checkout === "cancelled") return (_checkoutCache = { status: "cancelled" })
+  return (_checkoutCache = null)
+}
+
+const noopSubscribe = () => () => {}
+
 export default function CheckoutResultDialog() {
-  const [result, setResult] = React.useState<CheckoutResult | null>(null)
+  const urlResult = React.useSyncExternalStore(noopSubscribe, getCheckoutParam, () => null)
+  const [sessionData, setSessionData] = React.useState<SessionData | null>(null)
+  const [dismissed, setDismissed] = React.useState(false)
 
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const checkout = params.get("checkout")
-
     if (!checkout) return
 
-    // Clean up URL immediately so a refresh won't re-trigger the dialog
-    const cleanUrl = window.location.pathname
-    window.history.replaceState({}, "", cleanUrl)
+    window.history.replaceState({}, "", window.location.pathname)
 
     const sessionId = params.get("session_id")
-    if (!sessionId) return
+    if (!sessionId || checkout !== "success") return
 
-    if (checkout === "cancelled") {
-      setResult({ status: "cancelled" })
-      return
-    }
-
-    if (checkout === "success") {
-      fetch(`/api/checkout/session?session_id=${sessionId}`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.paymentStatus === "paid") {
-            setResult({ status: "success", session: data })
-          }
-        })
-    }
+    fetch(`/api/checkout/session?session_id=${sessionId}`)
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.paymentStatus === "paid") setSessionData(data)
+      })
   }, [])
+
+  if (dismissed) return null
+
+  const result: CheckoutResult | null = sessionData
+    ? { status: "success", session: sessionData }
+    : urlResult
 
   if (!result) return null
 
+  const dismiss = () => setDismissed(true)
+
   if (result.status === "cancelled") {
     return (
-      <Dialog open onOpenChange={() => setResult(null)}>
+      <Dialog open onOpenChange={dismiss}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -79,7 +93,7 @@ export default function CheckoutResultDialog() {
             Vous pouvez réessayer à tout moment.
           </p>
           <DialogFooter>
-            <Button onClick={() => setResult(null)}>Fermer</Button>
+            <Button onClick={dismiss}>Fermer</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -92,7 +106,7 @@ export default function CheckoutResultDialog() {
   const nightCount = Number(meta.nightCount)
 
   return (
-    <Dialog open onOpenChange={() => setResult(null)}>
+    <Dialog open onOpenChange={dismiss}>
       <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -141,7 +155,7 @@ export default function CheckoutResultDialog() {
         </p>
 
         <DialogFooter>
-          <Button onClick={() => setResult(null)}>Fermer</Button>
+          <Button onClick={dismiss}>Fermer</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
