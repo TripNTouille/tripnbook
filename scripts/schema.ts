@@ -1,4 +1,5 @@
 import { neon } from "@neondatabase/serverless"
+import "../lib/neon-config"
 import { loadEnv } from "./load-env"
 
 loadEnv()
