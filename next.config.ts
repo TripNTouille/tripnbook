@@ -3,6 +3,12 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   /* config options here */
+
+  // required for typescript 7
+  // see: https://github.com/vercel/next.js/pull/95831
+  experimental: {
+    useTypeScriptCli: true,
+  }
 };
 
 export default withSentryConfig(nextConfig, {
