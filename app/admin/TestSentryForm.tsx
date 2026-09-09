@@ -13,7 +13,8 @@ class SentryExampleFrontendError extends Error {
 }
 
 export default function TestSentryForm() {
-  const [status, setStatus] = useState<Status>("idle")
+  const [frontendStatus, setFrontendStatus] = useState<Status>("idle")
+  const [backendStatus, setBackendStatus] = useState<Status>("idle")
   const [isConnected, setIsConnected] = useState<boolean | null>(null)
 
   useEffect(() => {
@@ -22,24 +23,24 @@ export default function TestSentryForm() {
     })
   }, [])
 
-  async function handleClick() {
-    setStatus("pending")
-
-    await Sentry.startSpan({ name: "Admin Sentry Test", op: "test" }, async () => {
-      const res = await fetch("/api/sentry-example-api")
-      if (!res.ok) {
-        setStatus("success")
-      }
-    })
-
+  function handleFrontendClick() {
+    setFrontendStatus("success")
     throw new SentryExampleFrontendError()
+  }
+
+  async function handleBackendClick() {
+    setBackendStatus("pending")
+
+    const res = await fetch("/api/admin/test-sentry", { method: "POST" })
+    // The route throws on purpose: a 500 means the server error was raised.
+    setBackendStatus(!res.ok ? "success" : "error")
   }
 
   return (
     <section className="border rounded-lg p-6">
       <h2 className="text-lg font-medium mb-1">Test Sentry</h2>
       <p className="text-sm text-gray-500 mb-4">
-        Envoie une erreur frontend et backend à Sentry.
+        Envoie une erreur frontend ou serveur à Sentry.
       </p>
 
       {isConnected === false && (
@@ -48,16 +49,34 @@ export default function TestSentryForm() {
         </p>
       )}
 
-      <button
-        onClick={handleClick}
-        disabled={status === "pending" || isConnected === false}
-        className="bg-black text-white rounded px-4 py-2 text-sm disabled:opacity-50"
-      >
-        {status === "pending" ? "Envoi…" : "Lancer le test"}
-      </button>
+      <div className="flex gap-2">
+        <button
+          onClick={handleFrontendClick}
+          disabled={isConnected === false}
+          className="bg-black text-white rounded px-4 py-2 text-sm disabled:opacity-50"
+        >
+          Erreur frontend
+        </button>
 
-      {status === "success" && (
-        <p className="mt-3 text-sm text-green-600">Erreur envoyée à Sentry.</p>
+        <button
+          onClick={handleBackendClick}
+          disabled={backendStatus === "pending" || isConnected === false}
+          className="bg-black text-white rounded px-4 py-2 text-sm disabled:opacity-50"
+        >
+          {backendStatus === "pending" ? "Envoi…" : "Erreur serveur"}
+        </button>
+      </div>
+
+      {frontendStatus === "success" && (
+        <p className="mt-3 text-sm text-green-600">Erreur frontend envoyée à Sentry.</p>
+      )}
+      {backendStatus === "success" && (
+        <p className="mt-3 text-sm text-green-600">Erreur serveur envoyée à Sentry.</p>
+      )}
+      {backendStatus === "error" && (
+        <p className="mt-3 text-sm text-red-600">
+          La route de test n&apos;a pas renvoyé d&apos;erreur.
+        </p>
       )}
     </section>
   )
