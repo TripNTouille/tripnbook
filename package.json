@@ -30,7 +30,7 @@
     "react-day-picker": "^9.13.2",
     "react-dom": "19.2.8",
     "resend": "^6.26.0",
-    "stripe": "^21.0.1",
+    "stripe": "^22.6.2",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
