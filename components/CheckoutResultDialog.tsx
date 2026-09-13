@@ -1,4 +1,6 @@
 import * as React from "react"
+import { parseISO, format } from "date-fns"
+import { fr } from "date-fns/locale"
 import { siteConfig } from "@/config/site"
 import { CheckCircle, XCircle } from "lucide-react"
 
@@ -18,8 +20,8 @@ type SessionData = {
     roomName: string
     adultsCount: string
     childrenCount: string
-    from: string
-    to: string
+    fromDate: string
+    toDate: string
     nightCount: string
     phone: string
     specialNeeds: string
@@ -90,6 +92,8 @@ export default function CheckoutResultDialog() {
   const meta = session.metadata
   const totalGuests = Number(meta.adultsCount) + Number(meta.childrenCount)
   const nightCount = Number(meta.nightCount)
+  const fromLabel = format(parseISO(meta.fromDate), "d MMM yyyy", { locale: fr })
+  const toLabel = format(parseISO(meta.toDate), "d MMM yyyy", { locale: fr })
 
   return (
     <Dialog open onOpenChange={() => setResult(null)}>
@@ -119,7 +123,7 @@ export default function CheckoutResultDialog() {
           </p>
           <p>
             <span className="font-medium">Séjour :</span>{" "}
-            du {meta.from} au {meta.to} ({nightCount}{" "}
+            du {fromLabel} au {toLabel} ({nightCount}{" "}
             {nightCount > 1 ? "nuits" : "nuit"})
           </p>
           <p>

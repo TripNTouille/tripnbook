@@ -1,4 +1,5 @@
 import { neon } from "@neondatabase/serverless";
+import "./neon-config";
 
 /**
  * A SQL tagged-template executor compatible with both Neon and PGlite adapters.
