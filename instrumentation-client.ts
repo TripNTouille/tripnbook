@@ -6,6 +6,10 @@ import * as Sentry from "@sentry/nextjs";
 
 Sentry.init({
   dsn: "https://ce41be828d0a550584e72b75d7d44ee6@o4511117303939072.ingest.de.sentry.io/4511117306495056",
+
+  // Don't report errors from CI e2e runs (only NEXT_PUBLIC_* vars reach the browser).
+  enabled: !process.env.NEXT_PUBLIC_CI,
+
   // Enable logs to be sent to Sentry
   enableLogs: true,
 
