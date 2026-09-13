@@ -44,6 +44,8 @@ jobs:
       AUTH_SECRET: e2e-dummy-auth-secret
       AUTH_TRUST_HOST: "true"
       ADMIN_PASSWORD: e2e-admin-password
+      # Disables the client Sentry SDK (see instrumentation-client.ts).
+      NEXT_PUBLIC_CI: "true"
 
     steps:
       - uses: actions/checkout@v7
