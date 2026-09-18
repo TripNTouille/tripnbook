@@ -24,6 +24,8 @@ updates:
       security-fixes:
         applies-to: security-updates
         patterns: ["*"]
+    cooldown:
+      default-days: 10
     open-pull-requests-limit: 5
 
   - package-ecosystem: "github-actions"
