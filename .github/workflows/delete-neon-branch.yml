@@ -7,11 +7,12 @@ on:
 
 jobs:
   delete-neon-branch:
-    if: github.event.pull_request.merged == true
     runs-on: ubuntu-latest
 
     steps:
       - name: Delete Neon branch
+        # A PR closed without a preview deployment has no Neon branch to delete.
+        continue-on-error: true
         uses: neondatabase/delete-branch-action@v3
         with:
           project_id: ${{ vars.NEON_PROJECT_ID }}
