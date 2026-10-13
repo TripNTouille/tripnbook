@@ -5,7 +5,7 @@ import { sendBookingConfirmation } from "@/lib/email"
 import type { CalendarDeps, EmailDeps } from "@/lib/checkout"
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
-  apiVersion: "2026-08-26.dahlia",
+  apiVersion: "2026-09-30.endive",
 })
 
 export const calendar: CalendarDeps = {
