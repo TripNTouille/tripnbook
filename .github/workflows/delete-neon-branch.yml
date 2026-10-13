@@ -11,6 +11,8 @@ jobs:
 
     steps:
       - name: Delete Neon branch
+        # A PR closed without a preview deployment has no Neon branch to delete.
+        continue-on-error: true
         uses: neondatabase/delete-branch-action@v3
         with:
           project_id: ${{ vars.NEON_PROJECT_ID }}
