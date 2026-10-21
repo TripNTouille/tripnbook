@@ -1,6 +1,6 @@
 # E2E smoke tests
 
-Three Playwright specs that boot the built app and click through the
+Four Playwright specs that boot the built app and click through the
 critical paths. They run in CI on every PR (see `.github/workflows/ci.yml`)
 against a throwaway Postgres, with no secrets — external services (Stripe,
 Google Calendar) are mocked at the network layer.
