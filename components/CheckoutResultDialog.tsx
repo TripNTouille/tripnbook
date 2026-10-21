@@ -1,4 +1,5 @@
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import { parseISO, format } from "date-fns"
 import { fr } from "date-fns/locale"
 import { siteConfig } from "@/config/site"
@@ -33,42 +34,46 @@ type CheckoutResult =
   | { status: "cancelled" }
 
 export default function CheckoutResultDialog() {
-  const [result, setResult] = React.useState<CheckoutResult | null>(null)
+  const searchParams = useSearchParams()
+  // Snapshot on mount: cleaning the URL below also updates searchParams
+  const [{ checkout, sessionId }] = React.useState(() => ({
+    checkout: searchParams.get("checkout"),
+    sessionId: searchParams.get("session_id"),
+  }))
+  const [paidSession, setPaidSession] = React.useState<SessionData | null>(null)
+  const [dismissed, setDismissed] = React.useState(false)
 
   React.useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const checkout = params.get("checkout")
-
     if (!checkout) return
 
     // Clean up URL immediately so a refresh won't re-trigger the dialog
     const cleanUrl = window.location.pathname
     window.history.replaceState({}, "", cleanUrl)
 
-    const sessionId = params.get("session_id")
-    if (!sessionId) return
-
-    if (checkout === "cancelled") {
-      setResult({ status: "cancelled" })
-      return
-    }
-
-    if (checkout === "success") {
+    if (checkout === "success" && sessionId) {
       fetch(`/api/checkout/session?session_id=${sessionId}`)
         .then((res) => res.json())
         .then((data) => {
           if (data.paymentStatus === "paid") {
-            setResult({ status: "success", session: data })
+            setPaidSession(data)
           }
         })
     }
-  }, [])
+  }, [checkout, sessionId])
+
+  const result: CheckoutResult | null = dismissed
+    ? null
+    : checkout === "cancelled" && sessionId
+      ? { status: "cancelled" }
+      : paidSession
+        ? { status: "success", session: paidSession }
+        : null
 
   if (!result) return null
 
   if (result.status === "cancelled") {
     return (
-      <Dialog open onOpenChange={() => setResult(null)}>
+      <Dialog open onOpenChange={() => setDismissed(true)}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -81,7 +86,7 @@ export default function CheckoutResultDialog() {
             Vous pouvez réessayer à tout moment.
           </p>
           <DialogFooter>
-            <Button onClick={() => setResult(null)}>Fermer</Button>
+            <Button onClick={() => setDismissed(true)}>Fermer</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -96,7 +101,7 @@ export default function CheckoutResultDialog() {
   const toLabel = format(parseISO(meta.toDate), "d MMM yyyy", { locale: fr })
 
   return (
-    <Dialog open onOpenChange={() => setResult(null)}>
+    <Dialog open onOpenChange={() => setDismissed(true)}>
       <DialogContent aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -145,7 +150,7 @@ export default function CheckoutResultDialog() {
         </p>
 
         <DialogFooter>
-          <Button onClick={() => setResult(null)}>Fermer</Button>
+          <Button onClick={() => setDismissed(true)}>Fermer</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
