@@ -9,30 +9,24 @@ import { Button } from "@/components/ui/button"
 import { useSessionId } from "@/components/SessionIdProvider"
 import type { BookingWindow } from "@/lib/booking-window"
 
-function useClientReady() {
-  const [ready, setReady] = React.useState<{
-    today: Date
-    isDesktop: boolean
-  } | null>(null)
+const DESKTOP_QUERY = "(min-width: 768px)"
 
-  React.useEffect(() => {
-    setReady({
-      today: startOfDay(new Date()),
-      isDesktop: window.matchMedia("(min-width: 768px)").matches,
-    })
+function subscribeToDesktopQuery(onChange: () => void) {
+  const mql = window.matchMedia(DESKTOP_QUERY)
+  mql.addEventListener("change", onChange)
+  return () => mql.removeEventListener("change", onChange)
+}
 
-    function handleResize(e: MediaQueryListEvent) {
-      setReady((prev) =>
-        prev ? { ...prev, isDesktop: e.matches } : null
-      )
-    }
+// null on the server and during hydration, so the calendar only renders client-side
+function useClientReady(): { today: Date; isDesktop: boolean } | null {
+  const isDesktop = React.useSyncExternalStore(
+    subscribeToDesktopQuery,
+    () => window.matchMedia(DESKTOP_QUERY).matches,
+    () => null,
+  )
+  const [today] = React.useState(() => startOfDay(new Date()))
 
-    const mql = window.matchMedia("(min-width: 768px)")
-    mql.addEventListener("change", handleResize)
-    return () => mql.removeEventListener("change", handleResize)
-  }, [])
-
-  return ready
+  return isDesktop === null ? null : { today, isDesktop }
 }
 
 async function fetchBusyDates(roomId: number, from: Date, to: Date, sessionId: string): Promise<string[]> {
